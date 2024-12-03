@@ -280,6 +280,7 @@ static CPUState *gdb_next_attached_cpu(CPUState *cpu)
 {
     cpu = CPU_NEXT(cpu);
 
+#if 0
     while (cpu) {
         if (gdb_get_cpu_process(cpu)->attached) {
             break;
@@ -287,6 +288,7 @@ static CPUState *gdb_next_attached_cpu(CPUState *cpu)
 
         cpu = CPU_NEXT(cpu);
     }
+#endif
 
     return cpu;
 }
@@ -297,9 +299,11 @@ CPUState *gdb_first_attached_cpu(void)
     CPUState *cpu = first_cpu;
     GDBProcess *process = gdb_get_cpu_process(cpu);
 
+#if 0
     if (!process->attached) {
         return gdb_next_attached_cpu(cpu);
     }
+#endif
 
     return cpu;
 }
@@ -320,9 +324,11 @@ static CPUState *gdb_get_cpu(uint32_t pid, uint32_t tid)
             return NULL;
         }
 
+#if 0
         if (!process->attached) {
             return NULL;
         }
+#endif
 
         return gdb_get_first_cpu_in_process(process);
     } else {
@@ -339,9 +345,11 @@ static CPUState *gdb_get_cpu(uint32_t pid, uint32_t tid)
             return NULL;
         }
 
+#if 0
         if (!process->attached) {
             return NULL;
         }
+#endif
 
         return cpu;
     }
@@ -782,9 +790,11 @@ static int gdb_handle_vcont(const char *p)
         case GDB_ALL_THREADS:
             process = gdb_get_process(pid);
 
+#if 0
             if (!process->attached) {
                 return -EINVAL;
             }
+#endif
 
             cpu = gdb_get_first_cpu_in_process(process);
             while (cpu) {
