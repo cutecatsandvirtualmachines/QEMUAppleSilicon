@@ -794,7 +794,8 @@ void apple_monitor_setup_boot_args(
 void macho_setup_bootargs(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
                           hwaddr virt_base, hwaddr phys_base, hwaddr mem_size,
                           hwaddr kernel_top, hwaddr dtb_va, hwaddr dtb_size,
-                          AppleVideoArgs *video_args, const char *cmdline)
+                          AppleVideoArgs *video_args, const char *cmdline,
+                          hwaddr mem_size_actual)
 {
     AppleKernelBootArgs boot_args;
 
@@ -809,6 +810,7 @@ void macho_setup_bootargs(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
     boot_args.device_tree_ptr = dtb_va;
     boot_args.device_tree_length = dtb_size;
     boot_args.boot_flags = BOOT_FLAGS_DARK_BOOT;
+    boot_args.mem_size_actual = mem_size_actual;
 
     if (cmdline) {
         g_strlcpy(boot_args.cmdline, cmdline, sizeof(boot_args.cmdline));

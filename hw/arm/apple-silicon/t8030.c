@@ -367,10 +367,11 @@ static void t8030_load_classic_kc(T8030MachineState *t8030_machine,
     info->top_of_kernel_data_pa = ROUND_UP_16K(phys_ptr);
 
     info_report("Boot args: [%s]", cmdline);
-    macho_setup_bootargs(
-        &address_space_memory, get_system_memory(), info->kern_boot_args_addr,
-        g_virt_base, g_phys_base, mem_size, info->top_of_kernel_data_pa, dtb_va,
-        info->device_tree_size, &t8030_machine->video_args, cmdline);
+    macho_setup_bootargs(&address_space_memory, get_system_memory(),
+                         info->kern_boot_args_addr, g_virt_base, g_phys_base,
+                         mem_size, info->top_of_kernel_data_pa, dtb_va,
+                         info->device_tree_size, &t8030_machine->video_args,
+                         cmdline, machine->ram_size);
     g_virt_base = virt_low;
 }
 
@@ -486,10 +487,11 @@ static void t8030_load_fileset_kc(T8030MachineState *t8030_machine,
     info->top_of_kernel_data_pa = ROUND_UP_16K(phys_ptr);
 
     info_report("Boot args: [%s]", cmdline);
-    macho_setup_bootargs(
-        &address_space_memory, get_system_memory(), info->kern_boot_args_addr,
-        g_virt_base, g_phys_base, mem_size, info->top_of_kernel_data_pa, dtb_va,
-        info->device_tree_size, &t8030_machine->video_args, cmdline);
+    macho_setup_bootargs(&address_space_memory, get_system_memory(),
+                         info->kern_boot_args_addr, g_virt_base, g_phys_base,
+                         mem_size, info->top_of_kernel_data_pa, dtb_va,
+                         info->device_tree_size, &t8030_machine->video_args,
+                         cmdline, machine->ram_size);
     g_virt_base = virt_low;
 }
 

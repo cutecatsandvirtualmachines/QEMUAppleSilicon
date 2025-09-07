@@ -348,7 +348,8 @@ void apple_monitor_setup_boot_args(
 void macho_setup_bootargs(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
                           hwaddr virt_base, hwaddr phys_base, hwaddr mem_size,
                           hwaddr kernel_top, hwaddr dtb_va, hwaddr dtb_size,
-                          AppleVideoArgs *video_args, const char *cmdline);
+                          AppleVideoArgs *video_args, const char *cmdline,
+                          hwaddr mem_size_actual);
 
 void macho_allocate_segment_records(DTBNode *memory_map, MachoHeader64 *mh);
 
