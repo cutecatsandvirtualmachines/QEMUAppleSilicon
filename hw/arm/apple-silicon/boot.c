@@ -775,7 +775,7 @@ void apple_monitor_setup_boot_args(
     AppleMonitorBootArgs boot_args;
 
     memset(&boot_args, 0, sizeof(boot_args));
-    boot_args.version = BOOT_ARGS_VERSION_4;
+    boot_args.version = MONITOR_BOOT_ARGS_VERSION_4;
     boot_args.virt_base = virt_base;
     boot_args.phys_base = phys_base;
     boot_args.mem_size = mem_size;
@@ -800,8 +800,8 @@ void macho_setup_bootargs(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
     AppleKernelBootArgs boot_args;
 
     memset(&boot_args, 0, sizeof(boot_args));
-    boot_args.revision = BOOT_ARGS_VERSION_2;
-    boot_args.version = BOOT_ARGS_REVISION_2;
+    boot_args.revision = BOOT_ARGS_REVISION_2;
+    boot_args.version = BOOT_ARGS_VERSION_2;
     boot_args.virt_base = virt_base;
     boot_args.phys_base = phys_base;
     boot_args.mem_size = mem_size;

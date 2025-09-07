@@ -26,7 +26,7 @@
 
 #define BOOT_ARGS_REVISION_2 (2)
 #define BOOT_ARGS_VERSION_2 (2)
-#define BOOT_ARGS_VERSION_4 (4)
+#define MONITOR_BOOT_ARGS_VERSION_4 (4)
 #define BOOT_LINE_LENGTH (608)
 
 #define LC_SYMTAB (0x2)
