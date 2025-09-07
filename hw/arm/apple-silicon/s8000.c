@@ -334,11 +334,11 @@ static void s8000_load_classic_kc(S8000MachineState *s8000_machine,
     top_of_kernel_data_pa = (ROUND_UP_16K(phys_ptr) + 0x3000ull) & ~0x3FFFull;
 
     info_report("Boot args: [%s]", cmdline);
-    macho_setup_bootargs(nsas, sysmem, info->kern_boot_args_addr, g_virt_base,
-                         g_phys_base, KERNEL_REGION_SIZE, top_of_kernel_data_pa,
-                         dtb_va, info->device_tree_size,
-                         &s8000_machine->video_args, cmdline,
-                         machine->ram_size);
+    macho_setup_bootargs(s8000_machine->build_version, nsas, sysmem,
+                         info->kern_boot_args_addr, g_virt_base, g_phys_base,
+                         KERNEL_REGION_SIZE, top_of_kernel_data_pa, dtb_va,
+                         info->device_tree_size, &s8000_machine->video_args,
+                         cmdline, machine->ram_size);
     g_virt_base = virt_low;
 
     macho_highest_lowest(s8000_machine->secure_monitor, &tz1_virt_low,

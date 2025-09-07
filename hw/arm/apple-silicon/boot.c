@@ -775,7 +775,7 @@ void apple_monitor_setup_boot_args(
     AppleMonitorBootArgs boot_args;
 
     memset(&boot_args, 0, sizeof(boot_args));
-    boot_args.version = MONITOR_BOOT_ARGS_VERSION_4;
+    boot_args.version = 4;
     boot_args.virt_base = virt_base;
     boot_args.phys_base = phys_base;
     boot_args.mem_size = mem_size;
@@ -791,33 +791,101 @@ void apple_monitor_setup_boot_args(
                      sizeof(boot_args), true);
 }
 
-void macho_setup_bootargs(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
+static void
+macho_setup_bootargs_rev2(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
                           hwaddr virt_base, hwaddr phys_base, hwaddr mem_size,
                           hwaddr kernel_top, hwaddr dtb_va, hwaddr dtb_size,
                           AppleVideoArgs *video_args, const char *cmdline,
                           hwaddr mem_size_actual)
 {
-    AppleKernelBootArgs boot_args;
+    AppleKernelBootArgsRev2 boot_args;
 
-    memset(&boot_args, 0, sizeof(boot_args));
-    boot_args.revision = BOOT_ARGS_REVISION_2;
-    boot_args.version = BOOT_ARGS_VERSION_2;
+    boot_args.revision = 2;
+    boot_args.version = 2;
     boot_args.virt_base = virt_base;
     boot_args.phys_base = phys_base;
     boot_args.mem_size = mem_size;
-    memcpy(&boot_args.video_args, video_args, sizeof(boot_args.video_args));
     boot_args.kernel_top = kernel_top;
+    memcpy(&boot_args.video_args, video_args, sizeof(boot_args.video_args));
     boot_args.device_tree_ptr = dtb_va;
     boot_args.device_tree_length = dtb_size;
+    if (cmdline == NULL) {
+        memset(boot_args.cmdline, 0, sizeof(boot_args.cmdline));
+    } else {
+        g_strlcpy(boot_args.cmdline, cmdline, sizeof(boot_args.cmdline));
+    }
     boot_args.boot_flags = BOOT_FLAGS_DARK_BOOT;
     boot_args.mem_size_actual = mem_size_actual;
 
-    if (cmdline) {
+
+    // iOS 13: mem_size_actual is not a thing
+    address_space_rw(
+        as, addr, MEMTXATTRS_UNSPECIFIED, &boot_args,
+        sizeof(boot_args) -
+            (mem_size_actual == 0 * sizeof(boot_args.mem_size_actual)),
+        true);
+}
+
+static void
+macho_setup_bootargs_rev3(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
+                          hwaddr virt_base, hwaddr phys_base, hwaddr mem_size,
+                          hwaddr kernel_top, hwaddr dtb_va, hwaddr dtb_size,
+                          AppleVideoArgs *video_args, const char *cmdline,
+                          hwaddr mem_size_actual)
+{
+    AppleKernelBootArgsRev3 boot_args;
+
+    boot_args.revision = 3;
+    boot_args.version = 2;
+    boot_args.virt_base = virt_base;
+    boot_args.phys_base = phys_base;
+    boot_args.mem_size = mem_size;
+    boot_args.kernel_top = kernel_top;
+    memcpy(&boot_args.video_args, video_args, sizeof(boot_args.video_args));
+    boot_args.device_tree_ptr = dtb_va;
+    boot_args.device_tree_length = dtb_size;
+    if (cmdline == NULL) {
+        memset(boot_args.cmdline, 0, sizeof(boot_args.cmdline));
+    } else {
         g_strlcpy(boot_args.cmdline, cmdline, sizeof(boot_args.cmdline));
     }
+    boot_args.boot_flags = BOOT_FLAGS_DARK_BOOT;
+    boot_args.mem_size_actual = mem_size_actual;
 
     address_space_rw(as, addr, MEMTXATTRS_UNSPECIFIED, &boot_args,
                      sizeof(boot_args), true);
+}
+
+void macho_setup_bootargs(uint32_t build_version, AddressSpace *as,
+                          MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
+                          hwaddr phys_base, hwaddr mem_size, hwaddr kernel_top,
+                          hwaddr dtb_va, hwaddr dtb_size,
+                          AppleVideoArgs *video_args, const char *cmdline,
+                          hwaddr mem_size_actual)
+{
+    switch (BUILD_VERSION_MAJOR(build_version)) {
+    case 13:
+        macho_setup_bootargs_rev2(as, mem, addr, virt_base, phys_base, mem_size,
+                                  kernel_top, dtb_va, dtb_size, video_args,
+                                  cmdline, 0);
+        break;
+    case 14:
+    case 15:
+    case 16:
+    case 17:
+        macho_setup_bootargs_rev2(as, mem, addr, virt_base, phys_base, mem_size,
+                                  kernel_top, dtb_va, dtb_size, video_args,
+                                  cmdline, mem_size_actual);
+        break;
+    case 18:
+    case 26:
+        macho_setup_bootargs_rev3(as, mem, addr, virt_base, phys_base, mem_size,
+                                  kernel_top, dtb_va, dtb_size, video_args,
+                                  cmdline, mem_size_actual);
+        break;
+    default:
+        g_assert_not_reached();
+    }
 }
 
 void macho_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,

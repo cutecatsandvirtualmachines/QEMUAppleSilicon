@@ -24,11 +24,6 @@
 #include "exec/hwaddr.h"
 #include "hw/arm/apple-silicon/dtb.h"
 
-#define BOOT_ARGS_REVISION_2 (2)
-#define BOOT_ARGS_VERSION_2 (2)
-#define MONITOR_BOOT_ARGS_VERSION_4 (4)
-#define BOOT_LINE_LENGTH (608)
-
 #define LC_SYMTAB (0x2)
 #define LC_UNIXTHREAD (0x5)
 #define LC_DYSYMTAB (0xB)
@@ -216,10 +211,27 @@ typedef struct {
     uint32_t machine_type;
     uint64_t device_tree_ptr;
     uint32_t device_tree_length;
-    char cmdline[BOOT_LINE_LENGTH];
+    char cmdline[0x260];
     uint64_t boot_flags;
     uint64_t mem_size_actual;
-} AppleKernelBootArgs;
+} AppleKernelBootArgsRev2;
+
+typedef struct {
+    uint16_t revision;
+    uint16_t version;
+    uint64_t virt_base;
+    uint64_t phys_base;
+    uint64_t mem_size;
+    uint64_t kernel_top;
+    AppleVideoArgs video_args;
+    uint32_t machine_type;
+    uint64_t device_tree_ptr;
+    uint32_t device_tree_length;
+    char cmdline[0x400];
+    uint64_t boot_flags;
+    uint64_t mem_size_actual;
+    uint64_t reserved;
+} AppleKernelBootArgsRev3;
 
 #define EMBEDDED_PANIC_HEADER_FLAG_COREDUMP_COMPLETE (0x01)
 #define EMBEDDED_PANIC_HEADER_FLAG_STACKSHOT_SUCCEEDED (0x02)
@@ -345,9 +357,10 @@ void apple_monitor_setup_boot_args(
     hwaddr phys_base, hwaddr mem_size, hwaddr kern_args, hwaddr kern_entry,
     hwaddr kern_phys_base, hwaddr kern_phys_slide, hwaddr kern_virt_slide,
     hwaddr kern_text_section_off);
-void macho_setup_bootargs(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
-                          hwaddr virt_base, hwaddr phys_base, hwaddr mem_size,
-                          hwaddr kernel_top, hwaddr dtb_va, hwaddr dtb_size,
+void macho_setup_bootargs(uint32_t build_version, AddressSpace *as,
+                          MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
+                          hwaddr phys_base, hwaddr mem_size, hwaddr kernel_top,
+                          hwaddr dtb_va, hwaddr dtb_size,
                           AppleVideoArgs *video_args, const char *cmdline,
                           hwaddr mem_size_actual);
 
