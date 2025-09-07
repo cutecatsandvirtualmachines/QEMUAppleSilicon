@@ -32,6 +32,7 @@ static void apple_otg_realize(DeviceState *dev, Error **errp)
 {
     AppleOTGState *s = APPLE_OTG(dev);
     Object *obj;
+    BusState *bus = NULL;
     Error *local_err = NULL;
 
     memory_region_init(&s->dma_container_mr, OBJECT(dev),
@@ -58,9 +59,10 @@ static void apple_otg_realize(DeviceState *dev, Error **errp)
     sysbus_realize(SYS_BUS_DEVICE(&s->dwc2), errp);
     sysbus_pass_irq(SYS_BUS_DEVICE(s), SYS_BUS_DEVICE(&s->dwc2));
 
-    object_initialize_child(OBJECT(dev), "host", &s->usbtcp, TYPE_USB_TCP_HOST);
-    sysbus_realize(SYS_BUS_DEVICE(&s->usbtcp), errp);
-    qdev_realize(DEVICE(s->dwc2.device), &s->usbtcp.bus.qbus, errp);
+    sysbus_realize(s->host, errp);
+
+    bus = QLIST_FIRST(&DEVICE(s->host)->child_bus);
+    qdev_realize(DEVICE(s->dwc2.device), bus, errp);
 }
 
 static void apple_otg_reset(DeviceState *dev)
@@ -207,6 +209,14 @@ DeviceState *apple_otg_create(DTBNode *node)
     memory_region_init_io(&s->widget, OBJECT(dev), &widget_reg_ops, s,
                           TYPE_APPLE_OTG ".widget", sizeof(s->widget_reg));
     sysbus_init_mmio(sbd, &s->widget);
+
+    s->host = SYS_BUS_DEVICE(qdev_new(TYPE_USB_TCP_HOST));
+    object_property_add_alias(OBJECT(s), "conn-type", OBJECT(s->host),
+                              "conn-type");
+    object_property_add_alias(OBJECT(s), "conn-addr", OBJECT(s->host),
+                              "conn-addr");
+    object_property_add_alias(OBJECT(s), "conn-port", OBJECT(s->host),
+                              "conn-port");
     return dev;
 }
 

@@ -28,6 +28,7 @@
 #include "hw/boards.h"
 #include "hw/cpu/cluster.h"
 #include "hw/sysbus.h"
+#include "hw/usb/tcp-usb.h"
 #include "system/kvm.h"
 
 #define TYPE_S8000 "s8000"
@@ -82,6 +83,9 @@ typedef struct {
     bool kaslr_off;
     bool force_dfu;
     uint32_t board_id;
+    USBTCPRemoteConnType usb_conn_type;
+    char *usb_conn_addr;
+    uint16_t usb_conn_port;
 } S8000MachineState;
 
 #endif /* HW_ARM_APPLE_SILICON_S8000_H */

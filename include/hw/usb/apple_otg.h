@@ -23,7 +23,7 @@ struct AppleOTGState {
     MemoryRegion *dma_mr;
     DWC2State dwc2;
     uint64_t high_addr;
-    USBTCPHostState usbtcp;
+    SysBusDevice *host;
     char *fuzz_input;
     bool dart;
 };

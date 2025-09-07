@@ -2675,6 +2675,7 @@ static void t8030_machine_init(MachineState *machine)
     case 16:
     case 17:
     case 18:
+    case 26:
         t8030_machine->rtkit_protocol_ver = 12;
         break;
     default:
@@ -2690,6 +2691,7 @@ static void t8030_machine_init(MachineState *machine)
         break;
     case 17:
     case 18:
+    case 26:
         t8030_machine->sio_protocol = 10;
         break;
     default:
