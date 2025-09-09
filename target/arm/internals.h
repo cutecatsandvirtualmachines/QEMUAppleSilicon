@@ -994,6 +994,8 @@ static inline ARMMMUIdx core_to_aa64_mmu_idx(int mmu_idx)
 
 int arm_mmu_idx_to_el(ARMMMUIdx mmu_idx);
 
+int arm_mmu_idx_is_guarded(ARMMMUIdx mmu_idx);
+
 /* Return the MMU index for a v7M CPU in the specified security state */
 ARMMMUIdx arm_v7m_mmu_idx_for_secstate(CPUARMState *env, bool secstate);
 
@@ -1052,12 +1054,18 @@ static inline bool regime_has_2_ranges(ARMMMUIdx mmu_idx)
     case ARMMMUIdx_Stage1_E0:
     case ARMMMUIdx_Stage1_E1:
     case ARMMMUIdx_Stage1_E1_PAN:
+    case ARMMMUIdx_Stage1_GE1:
+    case ARMMMUIdx_Stage1_GE1_PAN:
     case ARMMMUIdx_E10_0:
     case ARMMMUIdx_E10_1:
     case ARMMMUIdx_E10_1_PAN:
     case ARMMMUIdx_E20_0:
     case ARMMMUIdx_E20_2:
     case ARMMMUIdx_E20_2_PAN:
+    case ARMMMUIdx_GE10_1:
+    case ARMMMUIdx_GE10_1_PAN:
+    case ARMMMUIdx_GE20_2:
+    case ARMMMUIdx_GE20_2_PAN:
         return true;
     default:
         return false;
@@ -1068,9 +1076,13 @@ static inline bool regime_is_pan(CPUARMState *env, ARMMMUIdx mmu_idx)
 {
     switch (mmu_idx) {
     case ARMMMUIdx_Stage1_E1_PAN:
+    case ARMMMUIdx_Stage1_GE1_PAN:
     case ARMMMUIdx_E10_1_PAN:
     case ARMMMUIdx_E20_2_PAN:
     case ARMMMUIdx_E30_3_PAN:
+    case ARMMMUIdx_GE10_1_PAN:
+    case ARMMMUIdx_GE20_2_PAN:
+    case ARMMMUIdx_GE30_3_PAN:
         return true;
     default:
         return false;
@@ -1092,17 +1104,26 @@ static inline uint32_t regime_el(CPUARMState *env, ARMMMUIdx mmu_idx)
     case ARMMMUIdx_Stage2:
     case ARMMMUIdx_Stage2_S:
     case ARMMMUIdx_E2:
+    case ARMMMUIdx_GE20_2:
+    case ARMMMUIdx_GE20_2_PAN:
+    case ARMMMUIdx_GE2:
         return 2;
     case ARMMMUIdx_E3:
     case ARMMMUIdx_E30_0:
     case ARMMMUIdx_E30_3_PAN:
+    case ARMMMUIdx_GE3:
+    case ARMMMUIdx_GE30_3_PAN:
         return 3;
     case ARMMMUIdx_E10_0:
     case ARMMMUIdx_Stage1_E0:
     case ARMMMUIdx_Stage1_E1:
     case ARMMMUIdx_Stage1_E1_PAN:
+    case ARMMMUIdx_Stage1_GE1:
+    case ARMMMUIdx_Stage1_GE1_PAN:
     case ARMMMUIdx_E10_1:
     case ARMMMUIdx_E10_1_PAN:
+    case ARMMMUIdx_GE10_1:
+    case ARMMMUIdx_GE10_1_PAN:
     case ARMMMUIdx_MPrivNegPri:
     case ARMMMUIdx_MUserNegPri:
     case ARMMMUIdx_MPriv:
@@ -1129,6 +1150,11 @@ static inline bool regime_is_user(CPUARMState *env, ARMMMUIdx mmu_idx)
     case ARMMMUIdx_MUserNegPri:
     case ARMMMUIdx_MSUserNegPri:
         return true;
+    case ARMMMUIdx_E10_1:
+    case ARMMMUIdx_E10_1_PAN:
+    case ARMMMUIdx_GE10_1:
+    case ARMMMUIdx_GE10_1_PAN:
+        g_assert_not_reached();
     default:
         return false;
     }
@@ -1395,6 +1421,8 @@ static inline bool arm_mmu_idx_is_stage1_of_2(ARMMMUIdx mmu_idx)
     case ARMMMUIdx_Stage1_E0:
     case ARMMMUIdx_Stage1_E1:
     case ARMMMUIdx_Stage1_E1_PAN:
+    case ARMMMUIdx_Stage1_GE1:
+    case ARMMMUIdx_Stage1_GE1_PAN:
         return true;
     default:
         return false;

@@ -402,6 +402,8 @@ int alle1_tlbmask(CPUARMState *env)
     return (ARMMMUIdxBit_E10_1 |
             ARMMMUIdxBit_E10_1_PAN |
             ARMMMUIdxBit_E10_0 |
+            ARMMMUIdxBit_GE10_1 |
+            ARMMMUIdxBit_GE10_1_PAN |
             ARMMMUIdxBit_Stage2 |
             ARMMMUIdxBit_Stage2_S);
 }
@@ -780,7 +782,12 @@ static void scr_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
                                            ARMMMUIdxBit_E20_2 |
                                            ARMMMUIdxBit_E10_1_PAN |
                                            ARMMMUIdxBit_E20_2_PAN |
-                                           ARMMMUIdxBit_E2));
+                                           ARMMMUIdxBit_E2 |
+                                           ARMMMUIdxBit_GE10_1 |
+                                           ARMMMUIdxBit_GE20_2 |
+                                           ARMMMUIdxBit_GE10_1_PAN |
+                                           ARMMMUIdxBit_GE20_2_PAN |
+                                           ARMMMUIdxBit_GE2));
     }
 }
 
@@ -1595,6 +1602,8 @@ static int gt_phys_redir_timeridx(CPUARMState *env)
     case ARMMMUIdx_E20_0:
     case ARMMMUIdx_E20_2:
     case ARMMMUIdx_E20_2_PAN:
+    case ARMMMUIdx_GE20_2:
+    case ARMMMUIdx_GE20_2_PAN:
         return GTIMER_HYP;
     default:
         return GTIMER_PHYS;
@@ -1607,6 +1616,8 @@ static int gt_virt_redir_timeridx(CPUARMState *env)
     case ARMMMUIdx_E20_0:
     case ARMMMUIdx_E20_2:
     case ARMMMUIdx_E20_2_PAN:
+    case ARMMMUIdx_GE20_2:
+    case ARMMMUIdx_GE20_2_PAN:
         return GTIMER_HYPVIRT;
     default:
         return GTIMER_VIRT;
@@ -2744,7 +2755,13 @@ static void vmsa_tcr_ttbr_el2_write(CPUARMState *env, const ARMCPRegInfo *ri,
      */
     if (extract64(raw_read(env, ri) ^ value, 48, 16) &&
         (arm_hcr_el2_eff(env) & HCR_E2H)) {
-        tlb_flush_by_mmuidx(env_cpu(env), ARMMMUIdxBit_E20_0 | ARMMMUIdxBit_E20_2 | ARMMMUIdxBit_E20_2_PAN);
+        uint32_t mask = ARMMMUIdxBit_E20_0;
+        if (arm_is_guarded(env)) {
+            mask |= ARMMMUIdxBit_GE20_2 | ARMMMUIdxBit_GE20_2_PAN;
+        } else {
+            mask |= ARMMMUIdxBit_E20_2 | ARMMMUIdxBit_E20_2_PAN;
+        }
+        tlb_flush_by_mmuidx(env_cpu(env), mask);
     }
     raw_write(env, ri, value);
 }
@@ -8997,7 +9014,7 @@ static void arm_cpu_do_interrupt_aarch64(CPUState *cs)
 
         if (arm_is_guarded(env)) {
             env->gxf.far_gl[new_el] = env->exception.vaddress;
-            qemu_log_mask(CPU_LOG_INT, "...with FAR 0x%" PRIx64 "\n",
+            qemu_log_mask(CPU_LOG_INT, "...with FAR_GL 0x%" PRIx64 "\n",
                         env->gxf.far_gl[new_el]);
         } else {
             env->cp15.far_el[new_el] = env->exception.vaddress;
@@ -9690,16 +9707,46 @@ int arm_mmu_idx_to_el(ARMMMUIdx mmu_idx)
         return 0;
     case ARMMMUIdx_E10_1:
     case ARMMMUIdx_E10_1_PAN:
+    case ARMMMUIdx_GE10_1:
+    case ARMMMUIdx_GE10_1_PAN:
         return 1;
     case ARMMMUIdx_E2:
     case ARMMMUIdx_E20_2:
     case ARMMMUIdx_E20_2_PAN:
+    case ARMMMUIdx_GE2:
+    case ARMMMUIdx_GE20_2:
+    case ARMMMUIdx_GE20_2_PAN:
         return 2;
     case ARMMMUIdx_E3:
     case ARMMMUIdx_E30_3_PAN:
+    case ARMMMUIdx_GE3:
+    case ARMMMUIdx_GE30_3_PAN:
         return 3;
     default:
         g_assert_not_reached();
+    }
+}
+
+int arm_mmu_idx_is_guarded(ARMMMUIdx mmu_idx)
+{
+    if (mmu_idx & ARM_MMU_IDX_M) {
+        return false;
+    }
+
+    switch (mmu_idx) {
+    case ARMMMUIdx_GE10_1:
+    case ARMMMUIdx_GE10_1_PAN:
+    case ARMMMUIdx_GE2:
+    case ARMMMUIdx_GE20_2:
+    case ARMMMUIdx_GE20_2_PAN:
+    case ARMMMUIdx_GE3:
+    case ARMMMUIdx_GE30_3_PAN:
+        return true;
+    case ARMMMUIdx_Stage1_GE1:
+    case ARMMMUIdx_Stage1_GE1_PAN:
+        g_assert_not_reached();
+    default:
+        return false;
     }
 }
 
@@ -9758,6 +9805,10 @@ ARMMMUIdx arm_mmu_idx_el(CPUARMState *env, int el)
         return ARMMMUIdx_E3;
     default:
         g_assert_not_reached();
+    }
+
+    if (arm_is_guarded(env) && (el > 0)) {
+        idx |= ARM_MMU_IDX_A_GXF;
     }
 
     return idx;

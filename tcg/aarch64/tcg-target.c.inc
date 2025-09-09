@@ -1632,8 +1632,8 @@ static bool tcg_out_qemu_st_slow_path(TCGContext *s, TCGLabelQemuLdst *lb)
     return true;
 }
 
-/* We expect to use a 7-bit scaled negative offset from ENV.  */
-#define MIN_TLB_MASK_TABLE_OFS  -512
+/* We expect to use a 12-bit scaled negative offset from ENV.  */
+#define MIN_TLB_MASK_TABLE_OFS  -4096
 
 /*
  * For system-mode, perform the TLB load and compare.
@@ -1671,8 +1671,10 @@ static TCGLabelQemuLdst *prepare_host_addr(TCGContext *s, HostAddress *h,
         /* Load cpu->neg.tlb.f[mmu_idx].{mask,table} into {tmp0,tmp1}. */
         QEMU_BUILD_BUG_ON(offsetof(CPUTLBDescFast, mask) != 0);
         QEMU_BUILD_BUG_ON(offsetof(CPUTLBDescFast, table) != 8);
-        tcg_out_insn(s, 3314, LDP, TCG_REG_TMP0, TCG_REG_TMP1, TCG_AREG0,
-                     tlb_mask_table_ofs(s, mem_index), 1, 0);
+        tcg_out_insn(s, 3401, SUBI, addr_type,
+                     TCG_REG_TMP0, TCG_AREG0, -tlb_mask_table_ofs(s, mem_index));
+        tcg_out_insn(s, 3314, LDP, TCG_REG_TMP0, TCG_REG_TMP1,
+                     TCG_REG_TMP0, 0, 1, 0);
 
         /* Extract the TLB index from the address into X0.  */
         tcg_out_insn(s, 3502S, AND_LSR, TCG_TYPE_I64,

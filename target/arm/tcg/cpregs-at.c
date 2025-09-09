@@ -139,7 +139,9 @@ static uint64_t do_ats_write(CPUARMState *env, uint64_t value,
         if (arm_feature(env, ARM_FEATURE_EL2)) {
             if (mmu_idx == ARMMMUIdx_E10_0 ||
                 mmu_idx == ARMMMUIdx_E10_1 ||
-                mmu_idx == ARMMMUIdx_E10_1_PAN) {
+                mmu_idx == ARMMMUIdx_E10_1_PAN ||
+                mmu_idx == ARMMMUIdx_GE10_1 ||
+                mmu_idx == ARMMMUIdx_GE10_1_PAN) {
                 format64 |= env->cp15.hcr_el2 & (HCR_VM | HCR_DC);
             } else {
                 format64 |= arm_current_el(env) == 2;
@@ -203,6 +205,7 @@ static void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
     ARMMMUIdx mmu_idx;
     int el = arm_current_el(env);
     ARMSecuritySpace ss = arm_security_space(env);
+    bool guarded = arm_is_guarded(env);
 
     switch (ri->opc2 & 6) {
     case 0:
@@ -210,9 +213,9 @@ static void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
         switch (el) {
         case 3:
             if (ri->crm == 9 && arm_pan_enabled(env)) {
-                mmu_idx = ARMMMUIdx_E30_3_PAN;
+                mmu_idx = (guarded ? ARMMMUIdx_GE30_3_PAN : ARMMMUIdx_E30_3_PAN);
             } else {
-                mmu_idx = ARMMMUIdx_E3;
+                mmu_idx = (guarded ? ARMMMUIdx_GE3 : ARMMMUIdx_E3);
             }
             break;
         case 2:
@@ -220,9 +223,9 @@ static void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
             /* fall through */
         case 1:
             if (ri->crm == 9 && arm_pan_enabled(env)) {
-                mmu_idx = ARMMMUIdx_Stage1_E1_PAN;
+                mmu_idx = (guarded ? ARMMMUIdx_Stage1_GE1_PAN : ARMMMUIdx_Stage1_E1_PAN);
             } else {
-                mmu_idx = ARMMMUIdx_Stage1_E1;
+                mmu_idx = (guarded ? ARMMMUIdx_Stage1_GE1 : ARMMMUIdx_Stage1_E1);
             }
             break;
         default:
@@ -248,7 +251,7 @@ static void ats_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
         break;
     case 4:
         /* stage 1+2 NonSecure PL1: ATS12NSOPR, ATS12NSOPW */
-        mmu_idx = ARMMMUIdx_E10_1;
+        mmu_idx = (guarded ? ARMMMUIdx_GE10_1 : ARMMMUIdx_E10_1);
         ss = ARMSS_NonSecure;
         break;
     case 6:
@@ -270,9 +273,10 @@ static void ats1h_write(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     MMUAccessType access_type = ri->opc2 & 1 ? MMU_DATA_STORE : MMU_DATA_LOAD;
     uint64_t par64;
+    bool guarded = arm_is_guarded(env);
 
     /* There is no SecureEL2 for AArch32. */
-    par64 = do_ats_write(env, value, access_type, ARMMMUIdx_E2,
+    par64 = do_ats_write(env, value, access_type, (guarded ? ARMMMUIdx_GE2 : ARMMMUIdx_E2),
                          ARMSS_NonSecure);
 
     A32_BANKED_CURRENT_REG_SET(env, par, par64);
@@ -322,23 +326,23 @@ static void ats_write64(CPUARMState *env, const ARMCPRegInfo *ri,
     bool regime_e20 = (hcr_el2 & (HCR_E2H | HCR_TGE)) == (HCR_E2H | HCR_TGE);
     bool for_el3 = false;
     ARMSecuritySpace ss;
+    bool guarded = arm_is_guarded(env);
 
     switch (ri->opc2 & 6) {
     case 0:
         switch (ri->opc1) {
         case 0: /* AT S1E1R, AT S1E1W, AT S1E1RP, AT S1E1WP */
             if (ri->crm == 9 && arm_pan_enabled(env)) {
-                mmu_idx = regime_e20 ?
-                          ARMMMUIdx_E20_2_PAN : ARMMMUIdx_Stage1_E1_PAN;
+                mmu_idx = regime_e20 ? (guarded ? ARMMMUIdx_GE20_2_PAN : ARMMMUIdx_E20_2_PAN) : (guarded ? ARMMMUIdx_Stage1_GE1_PAN : ARMMMUIdx_Stage1_E1_PAN);
             } else {
-                mmu_idx = regime_e20 ? ARMMMUIdx_E20_2 : ARMMMUIdx_Stage1_E1;
+                mmu_idx = regime_e20 ? (guarded ? ARMMMUIdx_GE20_2 : ARMMMUIdx_E20_2) : (guarded ? ARMMMUIdx_Stage1_GE1 : ARMMMUIdx_Stage1_E1);
             }
             break;
         case 4: /* AT S1E2R, AT S1E2W */
-            mmu_idx = hcr_el2 & HCR_E2H ? ARMMMUIdx_E20_2 : ARMMMUIdx_E2;
+            mmu_idx = hcr_el2 & HCR_E2H ? (guarded ? ARMMMUIdx_GE20_2 : ARMMMUIdx_E20_2) : (guarded ? ARMMMUIdx_GE2 : ARMMMUIdx_E2);
             break;
         case 6: /* AT S1E3R, AT S1E3W */
-            mmu_idx = ARMMMUIdx_E3;
+            mmu_idx = (guarded ? ARMMMUIdx_GE3 : ARMMMUIdx_E3);
             for_el3 = true;
             break;
         default:
@@ -349,7 +353,7 @@ static void ats_write64(CPUARMState *env, const ARMCPRegInfo *ri,
         mmu_idx = regime_e20 ? ARMMMUIdx_E20_0 : ARMMMUIdx_Stage1_E0;
         break;
     case 4: /* AT S12E1R, AT S12E1W */
-        mmu_idx = regime_e20 ? ARMMMUIdx_E20_2 : ARMMMUIdx_E10_1;
+        mmu_idx = regime_e20 ? (guarded ? ARMMMUIdx_GE20_2 : ARMMMUIdx_E20_2) : (guarded ? ARMMMUIdx_GE10_1 : ARMMMUIdx_E10_1);
         break;
     case 6: /* AT S12E0R, AT S12E0W */
         mmu_idx = regime_e20 ? ARMMMUIdx_E20_0 : ARMMMUIdx_E10_0;
