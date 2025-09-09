@@ -660,7 +660,7 @@ static void apple_a13_instance_init(Object *obj)
 
 AppleA13State *apple_a13_create(const char *name, uint32_t cpu_id,
                                 uint32_t phys_id, uint32_t cluster_id,
-                                uint8_t cluster_type)
+                                uint16_t cluster_type)
 {
     DeviceState *dev;
     AppleA13State *acpu;
@@ -721,7 +721,7 @@ AppleA13State *apple_a13_from_node(AppleDTNode *node)
         apple_dt_get_prop_u32(node, "cpu-id", &error_fatal),
         apple_dt_get_prop_u32(node, "reg", &error_fatal),
         apple_dt_get_prop_u32(node, "cluster-id", &error_fatal),
-        apple_dt_get_prop_u8(node, "cluster-type", &error_warn));
+        apple_dt_get_prop_u16(node, "cluster-type", &error_fatal));
 
     apple_dt_remove_prop_named(node, "reg-private");
     apple_dt_remove_prop_named(node, "cpu-uttdbg-reg");

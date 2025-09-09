@@ -126,7 +126,7 @@ typedef struct AppleA13Cluster {
 
 AppleA13State *apple_a13_create(const char *name, uint32_t cpu_id,
                                 uint32_t phys_id, uint32_t cluster_id,
-                                uint8_t cluster_type);
+                                uint16_t cluster_type);
 AppleA13State *apple_a13_from_node(AppleDTNode *node);
 bool apple_a13_is_asleep(AppleA13State *acpu);
 bool apple_a13_is_off(AppleA13State *acpu);
