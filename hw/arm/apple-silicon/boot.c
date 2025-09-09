@@ -544,7 +544,7 @@ void apple_boot_populate_dt(AppleDTNode *root, AppleBootInfo *info)
     apple_boot_process_dt_node(root, NULL);
 
     // Prevent further additions.
-    info->device_tree_size = apple_dt_finalise(root);
+    info->device_tree_size = ROUND_UP_16K(apple_dt_finalise(root));
 }
 
 static void set_memory_range(AppleDTNode *root, const char *name, uint64_t addr,
