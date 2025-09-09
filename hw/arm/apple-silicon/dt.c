@@ -108,7 +108,7 @@ static AppleDTProp *apple_dt_deserialise_prop(void **blob, char **name)
     size_t name_len;
 
     prop = g_new0(AppleDTProp, 1);
-    name_len = strnlen((char *)*blob, APPLE_DT_PROP_NAME_LEN);
+    name_len = strnlen(*blob, APPLE_DT_PROP_NAME_LEN - 1);
     *name = g_new(char, name_len + 1);
     memcpy(*name, *blob, name_len);
     (*name)[name_len] = '\0';
