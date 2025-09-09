@@ -149,8 +149,7 @@ static void tlbimva_hyp_write(CPUARMState *env, const ARMCPRegInfo *ri,
     CPUState *cs = env_cpu(env);
     uint64_t pageaddr = value & ~MAKE_64BIT_MASK(0, 12);
 
-    tlb_flush_page_by_mmuidx(cs, pageaddr, ARMMMUIdxBit_E2 |
-                                           ARMMMUIdxBit_GE2);
+    tlb_flush_page_by_mmuidx(cs, pageaddr, ARMMMUIdxBit_E2);
 }
 
 static void tlbimva_hyp_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
@@ -160,8 +159,7 @@ static void tlbimva_hyp_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
     uint64_t pageaddr = value & ~MAKE_64BIT_MASK(0, 12);
 
     tlb_flush_page_by_mmuidx_all_cpus_synced(cs, pageaddr,
-                                             ARMMMUIdxBit_E2 |
-                                             ARMMMUIdxBit_GE2);
+                                             ARMMMUIdxBit_E2);
 }
 
 static void tlbiipas2_hyp_write(CPUARMState *env, const ARMCPRegInfo *ri,
@@ -204,7 +202,7 @@ static void tlbiall_hyp_write(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     CPUState *cs = env_cpu(env);
 
-    tlb_flush_by_mmuidx(cs, ARMMMUIdxBit_GE2 | ARMMMUIdxBit_E2);
+    tlb_flush_by_mmuidx(cs, ARMMMUIdxBit_E2);
 }
 
 static void tlbiall_hyp_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
@@ -212,8 +210,7 @@ static void tlbiall_hyp_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
 {
     CPUState *cs = env_cpu(env);
 
-    tlb_flush_by_mmuidx_all_cpus_synced(cs, ARMMMUIdxBit_E2 |
-                                            ARMMMUIdxBit_GE2);
+    tlb_flush_by_mmuidx_all_cpus_synced(cs, ARMMMUIdxBit_E2);
 }
 
 /*
@@ -224,22 +221,18 @@ static void tlbiall_hyp_is_write(CPUARMState *env, const ARMCPRegInfo *ri,
 static int vae1_tlbmask(CPUARMState *env)
 {
     uint64_t hcr = arm_hcr_el2_eff(env);
-    uint32_t mask;
+    uint16_t mask;
 
     assert(arm_feature(env, ARM_FEATURE_AARCH64));
 
     if ((hcr & (HCR_E2H | HCR_TGE)) == (HCR_E2H | HCR_TGE)) {
         mask = ARMMMUIdxBit_E20_2 |
                ARMMMUIdxBit_E20_2_PAN |
-               ARMMMUIdxBit_GE20_2 |
-               ARMMMUIdxBit_GE20_2_PAN |
                ARMMMUIdxBit_E20_0;
     } else {
         /* This is AArch64 only, so we don't need to touch the EL30_x TLBs */
         mask = ARMMMUIdxBit_E10_1 |
                ARMMMUIdxBit_E10_1_PAN |
-               ARMMMUIdxBit_GE10_1 |
-               ARMMMUIdxBit_GE10_1_PAN |
                ARMMMUIdxBit_E10_0;
     }
     return mask;
@@ -248,16 +241,14 @@ static int vae1_tlbmask(CPUARMState *env)
 static int vae2_tlbmask(CPUARMState *env)
 {
     uint64_t hcr = arm_hcr_el2_eff(env);
-    uint32_t mask;
+    uint16_t mask;
 
     if (hcr & HCR_E2H) {
         mask = ARMMMUIdxBit_E20_2 |
                ARMMMUIdxBit_E20_2_PAN |
-               ARMMMUIdxBit_GE20_2 |
-               ARMMMUIdxBit_GE20_2_PAN |
                ARMMMUIdxBit_E20_0;
     } else {
-        mask = ARMMMUIdxBit_E2 | ARMMMUIdxBit_GE2;
+        mask = ARMMMUIdxBit_E2;
     }
     return mask;
 }
@@ -294,7 +285,6 @@ static int vae2_tlbbits(CPUARMState *env, uint64_t addr)
 {
     uint64_t hcr = arm_hcr_el2_eff(env);
     ARMMMUIdx mmu_idx;
-    bool guarded = arm_is_guarded(env);
 
     /*
      * Only the regime of the mmu_idx below is significant.
@@ -302,9 +292,9 @@ static int vae2_tlbbits(CPUARMState *env, uint64_t addr)
      * only has one.
      */
     if (hcr & HCR_E2H) {
-        mmu_idx = guarded ? ARMMMUIdx_GE20_2 : ARMMMUIdx_E20_2;
+        mmu_idx = ARMMMUIdx_E20_2;
     } else {
-        mmu_idx = guarded ? ARMMMUIdx_GE2 : ARMMMUIdx_E2;
+        mmu_idx = ARMMMUIdx_E2;
     }
 
     return tlbbits_for_regime(env, mmu_idx, addr);
@@ -337,10 +327,7 @@ static int e2_tlbmask(CPUARMState *env)
     return (ARMMMUIdxBit_E20_0 |
             ARMMMUIdxBit_E20_2 |
             ARMMMUIdxBit_E20_2_PAN |
-            ARMMMUIdxBit_E2 |
-            ARMMMUIdxBit_GE20_2 |
-            ARMMMUIdxBit_GE20_2_PAN |
-            ARMMMUIdxBit_GE2);
+            ARMMMUIdxBit_E2);
 }
 
 static void tlbi_aa64_alle1_write(CPUARMState *env, const ARMCPRegInfo *ri,
@@ -367,7 +354,7 @@ static void tlbi_aa64_alle3_write(CPUARMState *env, const ARMCPRegInfo *ri,
     ARMCPU *cpu = env_archcpu(env);
     CPUState *cs = CPU(cpu);
 
-    tlb_flush_by_mmuidx(cs, ARMMMUIdxBit_E3 | ARMMMUIdxBit_GE3);
+    tlb_flush_by_mmuidx(cs, ARMMMUIdxBit_E3);
 }
 
 static void tlbi_aa64_alle1is_write(CPUARMState *env, const ARMCPRegInfo *ri,

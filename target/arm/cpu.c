@@ -2696,7 +2696,7 @@ static vaddr aprofile_pointer_wrap(CPUState *cs, int mmu_idx,
      * and all pte's are aligned, so we never produce a wrap for these.
      * Double check that we're not truncating a 40-bit physical address.
      */
-    assert(((unsigned)mmu_idx & ~ARM_MMU_IDX_A_GXF) < (ARMMMUIdx_Stage2_S & ARM_MMU_IDX_COREIDX_MASK));
+    assert((unsigned)mmu_idx < (ARMMMUIdx_Stage2_S & ARM_MMU_IDX_COREIDX_MASK));
 
     if (!is_a64(cpu_env(cs))) {
         return (uint32_t)result;

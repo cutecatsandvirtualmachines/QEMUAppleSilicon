@@ -152,10 +152,6 @@ ARMMMUIdx stage_1_mmu_idx(ARMMMUIdx mmu_idx)
         return ARMMMUIdx_Stage1_E1;
     case ARMMMUIdx_E10_1_PAN:
         return ARMMMUIdx_Stage1_E1_PAN;
-    case ARMMMUIdx_GE10_1:
-        return ARMMMUIdx_Stage1_GE1;
-    case ARMMMUIdx_GE10_1_PAN:
-        return ARMMMUIdx_Stage1_GE1_PAN;
     default:
         return mmu_idx;
     }
@@ -265,8 +261,6 @@ static bool regime_translation_disabled(CPUARMState *env, ARMMMUIdx mmu_idx,
     case ARMMMUIdx_E10_0:
     case ARMMMUIdx_E10_1:
     case ARMMMUIdx_E10_1_PAN:
-    case ARMMMUIdx_GE10_1:
-    case ARMMMUIdx_GE10_1_PAN:
         /* TGE means that EL0/1 act as if SCTLR_EL1.M is zero */
         hcr_el2 = arm_hcr_el2_eff_secstate(env, space);
         if (hcr_el2 & HCR_TGE) {
@@ -277,8 +271,6 @@ static bool regime_translation_disabled(CPUARMState *env, ARMMMUIdx mmu_idx,
     case ARMMMUIdx_Stage1_E0:
     case ARMMMUIdx_Stage1_E1:
     case ARMMMUIdx_Stage1_E1_PAN:
-    case ARMMMUIdx_Stage1_GE1:
-    case ARMMMUIdx_Stage1_GE1_PAN:
         /* HCR.DC means SCTLR_EL1.M behaves as 0 */
         hcr_el2 = arm_hcr_el2_eff_secstate(env, space);
         if (hcr_el2 & HCR_DC) {
@@ -293,11 +285,6 @@ static bool regime_translation_disabled(CPUARMState *env, ARMMMUIdx mmu_idx,
     case ARMMMUIdx_E3:
     case ARMMMUIdx_E30_0:
     case ARMMMUIdx_E30_3_PAN:
-    case ARMMMUIdx_GE20_2:
-    case ARMMMUIdx_GE20_2_PAN:
-    case ARMMMUIdx_GE2:
-    case ARMMMUIdx_GE3:
-    case ARMMMUIdx_GE30_3_PAN:
         break;
 
     case ARMMMUIdx_Phys_S:
@@ -1337,10 +1324,6 @@ static bool get_phys_addr_v6(CPUARMState *env, S1Translate *ptw,
             prot_rw = ap_to_rw_prot(env, mmu_idx, ap, domain_prot);
             user_rw = ap_to_rw_prot_is_user(env, mmu_idx, ap, domain_prot, 1);
         }
-        if (arm_is_sprr_enabled(env)) {
-            prot_rw = pte_to_sprr_prot(env, ap, xn, pxn) & (PAGE_READ | PAGE_WRITE);
-            pxn = !(pte_to_sprr_prot(env, ap, xn, pxn) & PAGE_EXEC);
-        }
 
         result->f.prot = get_S1prot(env, mmu_idx, false, user_rw, prot_rw,
                                     xn, pxn, result->f.attrs.space, out_space);
@@ -1438,9 +1421,7 @@ static int get_S1prot(CPUARMState *env, ARMMMUIdx mmu_idx, bool is_aa64,
     assert(!regime_is_stage2(mmu_idx));
 
     if (is_user) {
-        if (!arm_is_sprr_enabled(env)) {
-            prot_rw = user_rw;
-        }
+        prot_rw = user_rw;
     } else {
         /*
          * PAN controls can forbid data accesses but don't affect insn fetch.
@@ -1479,10 +1460,6 @@ static int get_S1prot(CPUARMState *env, ARMMMUIdx mmu_idx, bool is_aa64,
             case ARMMMUIdx_E20_2:
             case ARMMMUIdx_E20_2_PAN:
                 return prot_rw;
-            case ARMMMUIdx_GE2:
-            case ARMMMUIdx_GE20_2:
-            case ARMMMUIdx_GE20_2_PAN:
-                g_assert_not_reached();
             default:
                 break;
             }
@@ -1507,10 +1484,6 @@ static int get_S1prot(CPUARMState *env, ARMMMUIdx mmu_idx, bool is_aa64,
 
     if (have_wxn) {
         wxn = regime_sctlr(env, mmu_idx) & SCTLR_WXN;
-    }
-
-    if (arm_is_sprr_enabled(env)) {
-        xn = pxn;
     }
 
     if (is_aa64) {
@@ -2152,12 +2125,6 @@ static bool get_phys_addr_lpae(CPUARMState *env, S1Translate *ptw,
                     out_space = ARMSS_NonSecure;
                 }
                 break;
-            case ARMMMUIdx_Stage1_GE1:
-            case ARMMMUIdx_Stage1_GE1_PAN:
-            case ARMMMUIdx_GE2:
-            case ARMMMUIdx_GE20_2:
-            case ARMMMUIdx_GE20_2_PAN:
-                g_assert_not_reached();
             default:
                 g_assert_not_reached();
             }
@@ -2848,7 +2815,7 @@ bool pmsav8_mpu_lookup(CPUARMState *env, uint32_t address,
 
         if (regime_el(env, mmu_idx) == 2) {
             result->f.prot = simple_ap_to_rw_prot_is_user(ap,
-                                            mmu_idx != ARMMMUIdx_E2 && mmu_idx != ARMMMUIdx_GE2);
+                                            mmu_idx != ARMMMUIdx_E2);
         } else {
             result->f.prot = simple_ap_to_rw_prot(env, mmu_idx, ap);
         }
@@ -3546,8 +3513,6 @@ static bool get_phys_addr_nogpc(CPUARMState *env, S1Translate *ptw,
     case ARMMMUIdx_Stage1_E0:
     case ARMMMUIdx_Stage1_E1:
     case ARMMMUIdx_Stage1_E1_PAN:
-    case ARMMMUIdx_Stage1_GE1:
-    case ARMMMUIdx_Stage1_GE1_PAN:
         /*
          * First stage lookup uses second stage for ptw; only
          * Secure has both S and NS IPA and starts with Stage2_S.
@@ -3574,12 +3539,6 @@ static bool get_phys_addr_nogpc(CPUARMState *env, S1Translate *ptw,
         goto do_twostage;
     case ARMMMUIdx_E10_1_PAN:
         s1_mmu_idx = ARMMMUIdx_Stage1_E1_PAN;
-        goto do_twostage;
-    case ARMMMUIdx_GE10_1:
-        s1_mmu_idx = ARMMMUIdx_Stage1_GE1;
-        goto do_twostage;
-    case ARMMMUIdx_GE10_1_PAN:
-        s1_mmu_idx = ARMMMUIdx_Stage1_GE1_PAN;
     do_twostage:
         /*
          * Call ourselves recursively to do the stage 1 and then stage 2
@@ -3711,13 +3670,6 @@ arm_mmu_idx_to_security_space(CPUARMState *env, ARMMMUIdx mmu_idx)
     case ARMMMUIdx_Stage1_E1:
     case ARMMMUIdx_Stage1_E1_PAN:
     case ARMMMUIdx_E2:
-    case ARMMMUIdx_GE10_1:
-    case ARMMMUIdx_GE10_1_PAN:
-    case ARMMMUIdx_GE20_2:
-    case ARMMMUIdx_GE20_2_PAN:
-    case ARMMMUIdx_Stage1_GE1:
-    case ARMMMUIdx_Stage1_GE1_PAN:
-    case ARMMMUIdx_GE2:
         ss = arm_security_space_below_el3(env);
         break;
     case ARMMMUIdx_Stage2:
@@ -3748,8 +3700,6 @@ arm_mmu_idx_to_security_space(CPUARMState *env, ARMMMUIdx mmu_idx)
     case ARMMMUIdx_E3:
     case ARMMMUIdx_E30_0:
     case ARMMMUIdx_E30_3_PAN:
-    case ARMMMUIdx_GE3:
-    case ARMMMUIdx_GE30_3_PAN:
         if (arm_feature(env, ARM_FEATURE_AARCH64) &&
             cpu_isar_feature(aa64_rme, env_archcpu(env))) {
             ss = ARMSS_Root;
@@ -3827,11 +3777,6 @@ hwaddr arm_cpu_get_phys_page_attrs_debug(CPUState *cs, vaddr addr,
     case ARMMMUIdx_E20_2:
     case ARMMMUIdx_E20_2_PAN:
         return arm_cpu_get_phys_page(env, addr, attrs, ARMMMUIdx_E20_0);
-    case ARMMMUIdx_GE10_1:
-    case ARMMMUIdx_GE10_1_PAN:
-    case ARMMMUIdx_GE20_2:
-    case ARMMMUIdx_GE20_2_PAN:
-        g_assert_not_reached();
     default:
         return -1;
     }
