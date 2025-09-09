@@ -380,6 +380,8 @@ static void s8000_memory_setup(MachineState *machine)
     MachoHeader64 *hdr;
     AppleDTNode *memory_map;
 
+    apple_dt_unfinalise(s8000_machine->device_tree);
+
     memory_map =
         apple_dt_get_node(s8000_machine->device_tree, "/chosen/memory-map");
 
@@ -648,7 +650,7 @@ static void s8000_cpu_setup(S8000MachineState *s8000_machine)
         next = iter->next;
         node = (AppleDTNode *)iter->data;
         if (i >= machine->smp.cpus) {
-            apple_dt_remove_node(root, node);
+            apple_dt_del_node(root, node);
             continue;
         }
 
@@ -1195,8 +1197,8 @@ static void s8000_create_wdt(S8000MachineState *s8000_machine)
     }
 
     // TODO: MCC
-    apple_dt_remove_prop_named(child, "function-panic_flush_helper");
-    apple_dt_remove_prop_named(child, "function-panic_halt_helper");
+    apple_dt_del_prop_named(child, "function-panic_flush_helper");
+    apple_dt_del_prop_named(child, "function-panic_halt_helper");
 
     apple_dt_set_prop_u32(child, "no-pmu", 1);
 

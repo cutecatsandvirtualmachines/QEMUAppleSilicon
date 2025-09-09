@@ -1031,7 +1031,7 @@ AppleSEPSimState *apple_sep_sim_from_node(AppleDTNode *node, bool modern)
 
     child = apple_dt_get_node(node, "iop-sep-nub");
     g_assert_nonnull(child);
-    apple_dt_remove_node_named(child, "Lynx");
+    apple_dt_del_node_named(child, "Lynx");
     return s;
 }
 

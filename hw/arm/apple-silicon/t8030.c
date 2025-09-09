@@ -557,6 +557,8 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
     gsize fsize;
     CarveoutAllocator *ca;
 
+    apple_dt_unfinalise(t8030_machine->device_tree);
+
     AppleDTNode *carveout_memory_map = apple_dt_get_node(
         t8030_machine->device_tree, "/chosen/carveout-memory-map");
     if (carveout_memory_map == NULL) {
@@ -565,8 +567,7 @@ static void t8030_memory_setup(T8030MachineState *t8030_machine)
                 __func__);
         AppleDTNode *chosen =
             apple_dt_get_node(t8030_machine->device_tree, "chosen");
-        carveout_memory_map =
-            apple_dt_create_node(chosen, "carveout-memory-map");
+        carveout_memory_map = apple_dt_node_new(chosen, "carveout-memory-map");
     }
 
     machine = MACHINE(t8030_machine);
@@ -1063,7 +1064,7 @@ static void t8030_cpu_setup(T8030MachineState *t8030_machine)
         next = iter->next;
         node = (AppleDTNode *)iter->data;
         if (i >= t8030_real_cpu_count(t8030_machine)) {
-            apple_dt_remove_node(root, node);
+            apple_dt_del_node(root, node);
             continue;
         }
 
@@ -1228,9 +1229,9 @@ static void t8030_amcc_setup(T8030MachineState *t8030_machine)
                 __func__);
         AppleDTNode *chosen =
             apple_dt_get_node(t8030_machine->device_tree, "chosen");
-        AppleDTNode *lock_regs = apple_dt_create_node(chosen, "lock-regs");
-        child = apple_dt_create_node(lock_regs, "amcc");
-        apple_dt_create_node(child, "amcc-ctrr-a");
+        AppleDTNode *lock_regs = apple_dt_node_new(chosen, "lock-regs");
+        child = apple_dt_node_new(lock_regs, "amcc");
+        apple_dt_node_new(child, "amcc-ctrr-a");
     }
     g_assert_nonnull(child);
 
@@ -1238,7 +1239,7 @@ static void t8030_amcc_setup(T8030MachineState *t8030_machine)
     apple_dt_set_prop_u32(child, "aperture-size", 0x100000);
     apple_dt_set_prop_u32(child, "plane-count", AMCC_PLANE_COUNT);
     apple_dt_set_prop_u32(child, "plane-stride", AMCC_PLANE_STRIDE);
-    apple_dt_set_prop_hwaddr(child, "aperture-phys-addr", AMCC_BASE);
+    apple_dt_set_prop_u64(child, "aperture-phys-addr", AMCC_BASE);
     apple_dt_set_prop_u32(child, "cache-status-reg-offset", 0x1C00);
     apple_dt_set_prop_u32(child, "cache-status-reg-mask", 0x1F);
     apple_dt_set_prop_u32(child, "cache-status-reg-value", 0);
@@ -1699,8 +1700,8 @@ static void t8030_create_wdt(T8030MachineState *t8030_machine)
     }
 
     // TODO: MCC
-    apple_dt_remove_prop_named(child, "function-panic_flush_helper");
-    apple_dt_remove_prop_named(child, "function-panic_halt_helper");
+    apple_dt_del_prop_named(child, "function-panic_flush_helper");
+    apple_dt_del_prop_named(child, "function-panic_halt_helper");
 
     apple_dt_set_prop_u32(child, "no-pmu", 1);
 

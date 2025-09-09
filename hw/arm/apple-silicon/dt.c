@@ -77,7 +77,7 @@ static void apple_dt_destroy_node(AppleDTNode *node)
     g_free(node);
 }
 
-AppleDTNode *apple_dt_create_node(AppleDTNode *parent, const char *name)
+AppleDTNode *apple_dt_node_new(AppleDTNode *parent, const char *name)
 {
     AppleDTNode *node;
 
@@ -176,7 +176,7 @@ AppleDTNode *apple_dt_deserialise(void *blob)
     return apple_dt_deserialise_node(&blob);
 }
 
-void apple_dt_remove_node(AppleDTNode *parent, AppleDTNode *node)
+void apple_dt_del_node(AppleDTNode *parent, AppleDTNode *node)
 {
     GList *iter;
 
@@ -194,7 +194,7 @@ void apple_dt_remove_node(AppleDTNode *parent, AppleDTNode *node)
     g_assert_not_reached();
 }
 
-bool apple_dt_remove_node_named(AppleDTNode *parent, const char *name)
+bool apple_dt_del_node_named(AppleDTNode *parent, const char *name)
 {
     AppleDTNode *node;
 
@@ -204,11 +204,11 @@ bool apple_dt_remove_node_named(AppleDTNode *parent, const char *name)
         return false;
     }
 
-    apple_dt_remove_node(parent, node);
+    apple_dt_del_node(parent, node);
     return true;
 }
 
-bool apple_dt_remove_prop_named(AppleDTNode *node, const char *name)
+bool apple_dt_del_prop_named(AppleDTNode *node, const char *name)
 {
     return g_hash_table_remove(node->props, name);
 }
@@ -263,13 +263,6 @@ AppleDTProp *apple_dt_set_prop_u64(AppleDTNode *node, const char *name,
     return apple_dt_set_prop(node, name, sizeof(val), &val);
 }
 
-AppleDTProp *apple_dt_set_prop_hwaddr(AppleDTNode *node, const char *name,
-                                      hwaddr val)
-{
-    val = cpu_to_le64(val);
-    return apple_dt_set_prop(node, name, sizeof(val), &val);
-}
-
 AppleDTProp *apple_dt_set_prop_str(AppleDTNode *node, const char *name,
                                    const char *val)
 {
@@ -281,143 +274,9 @@ AppleDTProp *apple_dt_set_prop_strn(AppleDTNode *node, const char *name,
 {
     g_autofree char *buf;
 
-    buf = g_new0(char, max_len);
+    buf = g_malloc0(max_len);
     strncpy(buf, val, max_len);
     return apple_dt_set_prop(node, name, max_len, buf);
-}
-
-static void apple_dt_serialise_node(AppleDTNode *node, void **buf)
-{
-    GHashTableIter prop_iter;
-    gpointer key;
-    AppleDTProp *prop;
-
-    g_assert_true(node->finalised);
-
-    stl_le_p(*buf, g_hash_table_size(node->props));
-    *buf += sizeof(uint32_t);
-
-    stl_le_p(*buf, g_list_length(node->children));
-    *buf += sizeof(uint32_t);
-
-    g_hash_table_iter_init(&prop_iter, node->props);
-    while (g_hash_table_iter_next(&prop_iter, &key, (gpointer *)&prop)) {
-        strncpy(*buf, key, APPLE_DT_PROP_NAME_LEN);
-        *buf += APPLE_DT_PROP_NAME_LEN;
-
-        stl_le_p(*buf, prop->len);
-        *buf += sizeof(uint32_t);
-
-        memcpy(*buf, prop->data, prop->len);
-        *buf += ROUND_UP(prop->len, 4);
-    }
-
-    g_list_foreach(node->children, (GFunc)apple_dt_serialise_node, buf);
-}
-
-void apple_dt_serialise(AppleDTNode *root, void *buf)
-{
-    apple_dt_serialise_node(root, &buf);
-}
-
-static uint32_t apple_dt_get_placeholder_len(AppleDTProp *prop,
-                                             const char *name)
-{
-    char *string;
-    char *next;
-    const char *token;
-    uint32_t len;
-
-    if (prop->len == 0) {
-        return 0;
-    }
-
-    next = string = g_new0(char, prop->len);
-    memcpy(next, prop->data, prop->len);
-
-    while ((token = qemu_strsep(&next, ",")) != NULL) {
-        if (*token == '\0') {
-            continue;
-        }
-
-        if (strncmp(token, "macaddr/", 8) == 0) {
-            g_free(string);
-            return 6;
-        }
-
-        if (strncmp(token, "syscfg/", 7) == 0) {
-            if (strlen(token) < 12 || token[11] != '/') {
-                continue;
-            }
-            len = g_ascii_strtoull(token + 8 + 4, NULL, 0);
-            if (len == 0) {
-                continue;
-            }
-            g_free(string);
-            return len;
-        }
-
-        if (strncmp(token, "zeroes/", 7) == 0) {
-            len = g_ascii_strtoull(token + 7, NULL, 0);
-            g_free(string);
-            return len;
-        }
-    }
-
-    g_free(string);
-    return 0;
-}
-
-static uint64_t apple_dt_get_serialised_prop_len(AppleDTProp *prop)
-{
-    g_assert_false(prop->placeholder);
-
-    return APPLE_DT_PROP_NAME_LEN + sizeof(prop->len) + ROUND_UP(prop->len, 4);
-}
-
-uint64_t apple_dt_finalise(AppleDTNode *node)
-{
-    GHashTableIter prop_iter;
-    gpointer key;
-    AppleDTProp *prop;
-    uint32_t placeholder_len;
-    uint64_t len;
-    GList *child_iter;
-
-    g_assert_false(node->finalised);
-
-    node->finalised = true;
-
-    len = sizeof(uint32_t) + sizeof(uint32_t);
-
-    g_hash_table_iter_init(&prop_iter, node->props);
-    while (g_hash_table_iter_next(&prop_iter, &key, (gpointer *)&prop)) {
-        // TODO: put a system to register things like syscfg values.
-        // who's going to have to do it? spoiler: it will be me, Visual, once
-        // again.
-        if (prop->placeholder) {
-            placeholder_len = apple_dt_get_placeholder_len(prop, key);
-            if (placeholder_len == 0) {
-                DWARN("Removing prop `%s`", (char *)key);
-                g_hash_table_iter_remove(&prop_iter);
-                continue;
-            }
-            DWARN("Expanding prop `%s` to default value", (char *)key);
-            g_free(prop->data);
-            prop->data = g_malloc0(placeholder_len);
-            prop->len = placeholder_len;
-            prop->placeholder = false;
-        }
-        len += apple_dt_get_serialised_prop_len(prop);
-    }
-
-
-    for (child_iter = node->children; child_iter != NULL;
-         child_iter = child_iter->next) {
-        len += apple_dt_finalise(child_iter->data);
-    }
-
-    return len;
 }
 
 AppleDTProp *apple_dt_get_prop(AppleDTNode *node, const char *name)
@@ -662,4 +521,158 @@ void apple_dt_connect_function_prop_in_out_gpio(DeviceState *src_device,
                                            &error_fatal));
     apple_dt_connect_function_prop_in_out(gpio, src_device, function_prop,
                                           gpio_name);
+}
+
+static uint32_t apple_dt_prop_placeholder_len(AppleDTProp *prop)
+{
+    char *string;
+    char *next;
+    const char *token;
+    uint32_t len;
+
+    if (prop->len == 0) {
+        return 0;
+    }
+
+    next = string = g_new0(char, prop->len);
+    memcpy(next, prop->data, prop->len);
+
+    while ((token = qemu_strsep(&next, ",")) != NULL) {
+        if (*token == '\0') {
+            continue;
+        }
+
+        if (strncmp(token, "macaddr/", 8) == 0) {
+            g_free(string);
+            return 6;
+        }
+
+        if (strncmp(token, "syscfg/", 7) == 0) {
+            if (strlen(token) < 12 || token[11] != '/') {
+                continue;
+            }
+            len = g_ascii_strtoull(token + 8 + 4, NULL, 0);
+            if (len == 0) {
+                continue;
+            }
+            g_free(string);
+            return len;
+        }
+
+        if (strncmp(token, "zeroes/", 7) == 0) {
+            len = g_ascii_strtoull(token + 7, NULL, 0);
+            g_free(string);
+            return len;
+        }
+    }
+
+    g_free(string);
+    return 0;
+}
+
+static void apple_dt_serialise_node(AppleDTNode *node, void **buf)
+{
+    void *prop_count_buf;
+    uint32_t prop_count;
+    GHashTableIter prop_iter;
+    gpointer key;
+    AppleDTProp *prop;
+    uint32_t placeholder_len;
+
+    g_assert_true(node->finalised);
+
+    prop_count_buf = *buf;
+    *buf += sizeof(uint32_t);
+
+    stl_le_p(*buf, g_list_length(node->children));
+    *buf += sizeof(uint32_t);
+
+    prop_count = 0;
+    g_hash_table_iter_init(&prop_iter, node->props);
+    while (g_hash_table_iter_next(&prop_iter, &key, (gpointer *)&prop)) {
+        // TODO: put a system to register things like syscfg values.
+        // who's going to have to do it? spoiler: it will be me, Visual, once
+        // again.
+        if (prop->placeholder) {
+            placeholder_len = apple_dt_prop_placeholder_len(prop);
+            if (placeholder_len == 0) {
+                DWARN("Removing prop `%s`", (char *)key);
+                continue;
+            }
+            DWARN("Expanding prop `%s` to default value", (char *)key);
+            strncpy(*buf, key, APPLE_DT_PROP_NAME_LEN);
+            *buf += APPLE_DT_PROP_NAME_LEN;
+            stl_le_p(*buf, placeholder_len);
+            *buf += sizeof(uint32_t);
+            *buf += ROUND_UP(placeholder_len, 4);
+        } else {
+            strncpy(*buf, key, APPLE_DT_PROP_NAME_LEN);
+            *buf += APPLE_DT_PROP_NAME_LEN;
+            stl_le_p(*buf, prop->len);
+            *buf += sizeof(uint32_t);
+
+            if (prop->len != 0) {
+                memcpy(*buf, prop->data, prop->len);
+                *buf += ROUND_UP(prop->len, 4);
+            }
+        }
+        prop_count += 1;
+    }
+    stl_le_p(prop_count_buf, prop_count);
+
+    g_list_foreach(node->children, (GFunc)apple_dt_serialise_node, buf);
+}
+
+void apple_dt_serialise(AppleDTNode *root, void *buf)
+{
+    apple_dt_serialise_node(root, &buf);
+}
+
+static uint64_t apple_dt_prop_serialised_len(AppleDTProp *prop)
+{
+    uint32_t placeholder_len;
+
+    if (prop->placeholder) {
+        placeholder_len = apple_dt_prop_placeholder_len(prop);
+        if (placeholder_len == 0) {
+            return 0;
+        }
+        return APPLE_DT_PROP_NAME_LEN + ROUND_UP(placeholder_len, 4);
+    }
+
+    return APPLE_DT_PROP_NAME_LEN + sizeof(prop->len) + ROUND_UP(prop->len, 4);
+}
+
+uint64_t apple_dt_finalise(AppleDTNode *node)
+{
+    GHashTableIter prop_iter;
+    gpointer key;
+    AppleDTProp *prop;
+    uint64_t len;
+    GList *child_iter;
+
+    g_assert_false(node->finalised);
+
+    node->finalised = true;
+
+    len = sizeof(uint32_t) + sizeof(uint32_t);
+
+    g_hash_table_iter_init(&prop_iter, node->props);
+    while (g_hash_table_iter_next(&prop_iter, &key, (gpointer *)&prop)) {
+        len += apple_dt_prop_serialised_len(prop);
+    }
+
+    for (child_iter = node->children; child_iter != NULL;
+         child_iter = child_iter->next) {
+        len += apple_dt_finalise(child_iter->data);
+    }
+
+    return len;
+}
+
+void apple_dt_unfinalise(AppleDTNode *root)
+{
+    root->finalised = false;
+
+    g_list_foreach(root->children, (GFunc)apple_dt_unfinalise, NULL);
 }

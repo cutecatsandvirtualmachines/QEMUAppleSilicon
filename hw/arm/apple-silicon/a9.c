@@ -207,8 +207,8 @@ AppleA9State *apple_a9_from_node(AppleDTNode *node)
                            apple_dt_get_prop_u32(node, "cpu-id", &error_fatal),
                            apple_dt_get_prop_u32(node, "reg", &error_fatal));
 
-    apple_dt_remove_prop_named(node, "reg-private");
-    apple_dt_remove_prop_named(node, "cpu-uttdbg-reg");
+    apple_dt_del_prop_named(node, "reg-private");
+    apple_dt_del_prop_named(node, "cpu-uttdbg-reg");
     if (acpu->cpu_id == 0) {
         apple_dt_set_prop_str(node, "state", "running");
     }
@@ -218,7 +218,7 @@ AppleA9State *apple_a9_from_node(AppleDTNode *node)
     apple_dt_set_prop_u64(node, "memory-frequency", 24000000);
     apple_dt_set_prop_u64(node, "bus-frequency", 24000000);
     apple_dt_set_prop_u64(node, "clock-frequency", 24000000);
-    apple_dt_remove_prop_named(node, "coresight-reg");
+    apple_dt_del_prop_named(node, "coresight-reg");
 
     return acpu;
 }

@@ -40,12 +40,13 @@ typedef struct {
     bool finalised;
 } AppleDTNode;
 
-AppleDTNode *apple_dt_create_node(AppleDTNode *parent, const char *name);
+AppleDTNode *apple_dt_node_new(AppleDTNode *parent, const char *name);
 AppleDTNode *apple_dt_deserialise(void *blob);
-void apple_dt_serialise(AppleDTNode *root, void *buf);
-bool apple_dt_remove_node_named(AppleDTNode *parent, const char *name);
-void apple_dt_remove_node(AppleDTNode *node, AppleDTNode *child);
-bool apple_dt_remove_prop_named(AppleDTNode *node, const char *name);
+
+bool apple_dt_del_node_named(AppleDTNode *parent, const char *name);
+void apple_dt_del_node(AppleDTNode *node, AppleDTNode *child);
+bool apple_dt_del_prop_named(AppleDTNode *node, const char *name);
+
 AppleDTProp *apple_dt_set_prop(AppleDTNode *n, const char *name, uint32_t len,
                                const void *val);
 AppleDTProp *apple_dt_set_prop_null(AppleDTNode *node, const char *name);
@@ -53,14 +54,12 @@ AppleDTProp *apple_dt_set_prop_u32(AppleDTNode *node, const char *name,
                                    uint32_t val);
 AppleDTProp *apple_dt_set_prop_u64(AppleDTNode *node, const char *name,
                                    uint64_t val);
-AppleDTProp *apple_dt_set_prop_hwaddr(AppleDTNode *node, const char *name,
-                                      hwaddr val);
 AppleDTProp *apple_dt_set_prop_str(AppleDTNode *node, const char *name,
                                    const char *val);
 AppleDTProp *apple_dt_set_prop_strn(AppleDTNode *node, const char *name,
                                     uint32_t max_len, const char *val);
-AppleDTNode *apple_dt_get_node(AppleDTNode *n, const char *path);
-uint64_t apple_dt_finalise(AppleDTNode *node);
+
+AppleDTNode *apple_dt_get_node(AppleDTNode *node, const char *path);
 AppleDTProp *apple_dt_get_prop(AppleDTNode *node, const char *name);
 const char *apple_dt_get_prop_str(AppleDTNode *node, const char *name,
                                   Error **errp);
@@ -85,6 +84,7 @@ uint32_t apple_dt_get_prop_u32(AppleDTNode *node, const char *name,
                                Error **errp);
 uint64_t apple_dt_get_prop_u64(AppleDTNode *node, const char *name,
                                Error **errp);
+
 void apple_dt_connect_function_prop_out_in(DeviceState *target_device,
                                            DeviceState *src_device,
                                            AppleDTProp *function_prop,
@@ -99,5 +99,9 @@ void apple_dt_connect_function_prop_in_out(DeviceState *target_device,
 void apple_dt_connect_function_prop_in_out_gpio(DeviceState *src_device,
                                                 AppleDTProp *function_prop,
                                                 const char *gpio_name);
+
+uint64_t apple_dt_finalise(AppleDTNode *root);
+void apple_dt_serialise(AppleDTNode *root, void *buf);
+void apple_dt_unfinalise(AppleDTNode *root);
 
 #endif /* HW_ARM_APPLE_SILICON_DT_H */

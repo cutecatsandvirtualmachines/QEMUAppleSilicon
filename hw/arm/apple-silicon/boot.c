@@ -258,7 +258,7 @@ static void apple_boot_process_dt_node(AppleDTNode *node, AppleDTNode *parent)
             DINFO("Removing node `%s` because its compatible property `%s` "
                   "is not whitelisted",
                   apple_dt_find_prop(node, "name")->data, prop->data);
-            apple_dt_remove_node(parent, node);
+            apple_dt_del_node(parent, node);
             return;
         }
     }
@@ -273,7 +273,7 @@ static void apple_boot_process_dt_node(AppleDTNode *node, AppleDTNode *parent)
                 g_assert_nonnull(parent);
                 DINFO("Removing node `%s` because its name is blacklisted",
                       prop->data);
-                apple_dt_remove_node(parent, node);
+                apple_dt_del_node(parent, node);
                 return;
             }
         }
@@ -290,7 +290,7 @@ static void apple_boot_process_dt_node(AppleDTNode *node, AppleDTNode *parent)
                 DINFO("Removing node `%s` because its device type "
                       "property `%s` is blacklisted",
                       apple_dt_find_prop(node, "name")->data, prop->data);
-                apple_dt_remove_node(parent, node);
+                apple_dt_del_node(parent, node);
                 return;
             }
         }
@@ -298,7 +298,7 @@ static void apple_boot_process_dt_node(AppleDTNode *node, AppleDTNode *parent)
 
     for (count = sizeof(REM_PROPS) / sizeof(REM_PROPS[0]), i = 0; i < count;
          i++) {
-        apple_dt_remove_prop_named(node, REM_PROPS[i]);
+        apple_dt_del_prop_named(node, REM_PROPS[i]);
     }
 
     for (iter = node->children; iter != NULL;) {
@@ -508,8 +508,8 @@ void apple_boot_populate_dt(AppleDTNode *root, AppleBootInfo *info)
     g_assert_nonnull(prop);
     qemu_guest_getrandom_nofail(prop->data, prop->len);
 
-    apple_dt_set_prop_hwaddr(child, "dram-base", info->dram_base);
-    apple_dt_set_prop_hwaddr(child, "dram-size", info->dram_size);
+    apple_dt_set_prop_u64(child, "dram-base", info->dram_base);
+    apple_dt_set_prop_u64(child, "dram-size", info->dram_size);
     apple_dt_set_prop_str(child, "firmware-version",
                           "ChefKiss QEMU Apple Silicon");
 
