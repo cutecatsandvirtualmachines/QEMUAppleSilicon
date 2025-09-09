@@ -717,7 +717,7 @@ AppleA13State *apple_a13_from_node(AppleDTNode *node)
     AppleA13State *acpu;
 
     acpu = apple_a13_create(
-        apple_dt_get_prop(node, "name")->data,
+        apple_dt_get_prop_str(node, "name", &error_fatal),
         apple_dt_get_prop_u32(node, "cpu-id", &error_fatal),
         apple_dt_get_prop_u32(node, "reg", &error_fatal),
         apple_dt_get_prop_u32(node, "cluster-id", &error_fatal),

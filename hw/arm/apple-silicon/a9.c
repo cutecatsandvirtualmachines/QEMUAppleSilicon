@@ -203,10 +203,9 @@ AppleA9State *apple_a9_from_node(AppleDTNode *node)
 {
     AppleA9State *acpu;
 
-    acpu =
-        apple_a9_create(apple_dt_get_prop(node, "name")->data,
-                        apple_dt_get_prop_u32(node, "cpu-id", &error_fatal),
-                        apple_dt_get_prop_u32(node, "reg", &error_fatal));
+    acpu = apple_a9_create(apple_dt_get_prop_str(node, "name", &error_fatal),
+                           apple_dt_get_prop_u32(node, "cpu-id", &error_fatal),
+                           apple_dt_get_prop_u32(node, "reg", &error_fatal));
 
     apple_dt_remove_prop_named(node, "reg-private");
     apple_dt_remove_prop_named(node, "cpu-uttdbg-reg");
