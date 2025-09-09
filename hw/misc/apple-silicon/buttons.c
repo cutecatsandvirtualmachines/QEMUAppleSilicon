@@ -29,8 +29,7 @@
 #include "ui/input.h"
 #include "system/runstate.h"
 
-#if 1
-#include "qemu/log.h"
+#if 0
 #define DPRINTF(fmt, ...)                    \
     do {                                     \
         fprintf(stderr, fmt, ##__VA_ARGS__); \
