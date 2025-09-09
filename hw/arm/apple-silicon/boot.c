@@ -494,6 +494,7 @@ void macho_populate_dtb(DTBNode *root, AppleBootInfo *info)
     // will cause sep panic: sks 0x996b6
     dtb_set_prop_u32(child, "protected-data-access", 0);
 #endif
+    dtb_set_prop_u32(child, "image4-allow-magazine-updates", 1);
 
     prop = dtb_find_prop(child, "random-seed");
     g_assert_nonnull(prop);
@@ -525,6 +526,8 @@ void macho_populate_dtb(DTBNode *root, AppleBootInfo *info)
 #if 0
     dtb_set_prop_null(child, "no-effaceable-storage");
 #endif
+    // enabling fastsim for iOS 26
+    dtb_set_prop_u32(child, "insecure_hpr", 1);
 
     child = dtb_get_node(root, "chosen/manifest-properties");
     dtb_set_prop(child, "BNCH", sizeof(info->boot_nonce_hash),
