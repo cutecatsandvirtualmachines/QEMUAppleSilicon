@@ -587,7 +587,8 @@ SysBusDevice *apple_spmi_from_node(AppleDTNode *node)
 
     dev->id = apple_dt_get_prop_strdup(node, "name", &error_fatal);
 
-    s->reg_vers = apple_dt_get_prop_u32_or(node, "reg-vers", 0, &error_fatal);
+    s->reg_vers =
+        apple_dt_get_prop_u32_or(node, "reg-vers", s->reg_vers, &error_fatal);
 
     // XXX: There is a register overlapping issue (STS and ENAB) with reg v0
     g_assert_cmpuint(s->reg_vers, !=, 0);
