@@ -86,7 +86,7 @@ void port_devices_set_power(ApplePCIEPort *port, bool power)
 
 static void apcie_port_gpio_set_clkreq(DeviceState *dev, int level)
 {
-    ApplePCIEPort *port = dev;
+    ApplePCIEPort *port = APPLE_PCIE_PORT(dev);
     DPRINTF("%s: device set_irq: old: %d ; new %d\n", __func__,
             port->gpio_clkreq_val, level);
     port->gpio_clkreq_val = level;

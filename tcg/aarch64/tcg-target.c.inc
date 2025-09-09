@@ -1633,7 +1633,7 @@ static bool tcg_out_qemu_st_slow_path(TCGContext *s, TCGLabelQemuLdst *lb)
 }
 
 /* We expect to use a 7-bit scaled negative offset from ENV.  */
-#define MIN_TLB_MASK_TABLE_OFS  -512
+#define MIN_TLB_MASK_TABLE_OFS  -528
 
 /*
  * For system-mode, perform the TLB load and compare.
