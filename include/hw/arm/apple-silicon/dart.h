@@ -2,7 +2,7 @@
 #define HW_ARM_APPLE_SILICON_DART_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "qom/object.h"
 
 typedef struct AppleDARTState AppleDARTState;
@@ -23,6 +23,6 @@ IOMMUMemoryRegion *apple_dart_iommu_mr(AppleDARTState *dart, uint32_t sid);
 IOMMUMemoryRegion *apple_dart_instance_iommu_mr(AppleDARTState *s,
                                                 uint32_t instance,
                                                 uint32_t sid);
-AppleDARTState *apple_dart_create(DTBNode *node);
+AppleDARTState *apple_dart_from_node(AppleDTNode *node);
 
 #endif /* HW_ARM_APPLE_SILICON_DART_H */

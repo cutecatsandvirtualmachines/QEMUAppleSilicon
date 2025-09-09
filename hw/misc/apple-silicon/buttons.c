@@ -18,7 +18,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/misc/apple-silicon/buttons.h"
 #include "hw/misc/apple-silicon/smc.h"
@@ -180,12 +180,12 @@ static uint8_t smc_key_btnR_write(AppleSMCState *s, SMCKey *key,
     }
 }
 
-SysBusDevice *apple_buttons_create(DTBNode *node)
+SysBusDevice *apple_buttons_create(AppleDTNode *node)
 {
     DeviceState *dev;
     AppleButtonsState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
 
     dev = qdev_new(TYPE_APPLE_BUTTONS);
     s = APPLE_BUTTONS(dev);

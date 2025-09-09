@@ -1,5 +1,29 @@
+/*
+ * Apple Interrupt Controller.
+ *
+ * Copyright (c) 2024-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/intc/apple_aic.h"
 #include "hw/irq.h"
 #include "hw/pci/msi.h"
@@ -517,45 +541,35 @@ static void apple_aic_unrealize(DeviceState *dev)
     timer_free(s->timer);
 }
 
-SysBusDevice *apple_aic_create(uint32_t numCPU, DTBNode *node,
-                               DTBNode *timebase_node)
+SysBusDevice *apple_aic_create(uint32_t numCPU, AppleDTNode *node,
+                               AppleDTNode *timebase_node)
 {
     DeviceState *dev;
     AppleAICState *s;
-    DTBProp *prop;
+    AppleDTProp *prop;
     hwaddr *reg;
-    uint64_t base;
-    uint64_t timebase;
 
     dev = qdev_new(TYPE_APPLE_AIC);
     s = APPLE_AIC(dev);
 
-    prop = dtb_find_prop(node, "AAPL,phandle");
-    g_assert_nonnull(prop);
-    s->phandle = *(uint32_t *)prop->data;
+    s->phandle = apple_dt_get_prop_u32(node, "AAPL,phandle", &error_fatal);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
     reg = (hwaddr *)prop->data;
     s->base_size = reg[1];
 
-    prop = dtb_find_prop(node, "ipid-mask");
-    s->numEIR = prop->length / 4;
+    prop = apple_dt_get_prop(node, "ipid-mask");
+    g_assert_nonnull(prop);
+    s->numEIR = prop->len / 4;
     s->numIRQ = s->numEIR * 32;
-
     s->numCPU = numCPU;
-    dtb_set_prop_u32(node, "#main-cpus", s->numCPU);
 
-    dtb_set_prop_u32(node, "#shared-timestamps", 0);
+    s->time_base = apple_dt_get_prop_u64(timebase_node, "reg", &error_warn) -
+                   apple_dt_get_prop_u64(node, "reg", &error_warn);
 
-    prop = dtb_find_prop(node, "reg");
-    g_assert_nonnull(prop);
-    base = *(uint64_t *)prop->data;
-
-    prop = dtb_find_prop(timebase_node, "reg");
-    g_assert_nonnull(prop);
-    timebase = *(uint64_t *)prop->data;
-    s->time_base = timebase - base;
+    apple_dt_set_prop_u32(node, "#main-cpus", numCPU);
+    apple_dt_set_prop_u32(node, "#shared-timestamps", 0);
 
     return SYS_BUS_DEVICE(dev);
 }

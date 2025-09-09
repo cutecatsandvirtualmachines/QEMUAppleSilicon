@@ -20,7 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "crypto/hash.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/arm/apple-silicon/sep-sim.h"
 #include "hw/misc/apple-silicon/a7iop/core.h"
 #include "hw/misc/apple-silicon/a7iop/mailbox/core.h"
@@ -531,7 +531,8 @@ static void apple_sep_sim_handle_bootstrap_msg(AppleSEPSimState *s,
 
         qemu_guest_getrandom(&randval, sizeof(randval), NULL);
         apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
-                                   BOOTSTRAP_OP_NONCE_WORD_REPLY, msg->param, randval);
+                                   BOOTSTRAP_OP_NONCE_WORD_REPLY, msg->param,
+                                   randval);
         break;
     case BOOTSTRAP_OP_CHECK_TZ0:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: CHECK_TZ0\n");
@@ -1005,20 +1006,20 @@ static void apple_sep_sim_bh(void *opaque)
     }
 }
 
-AppleSEPSimState *apple_sep_sim_create(DTBNode *node, bool modern)
+AppleSEPSimState *apple_sep_sim_from_node(AppleDTNode *node, bool modern)
 {
     DeviceState *dev;
     AppleA7IOP *a7iop;
     AppleSEPSimState *s;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
-    DTBNode *child;
+    AppleDTNode *child;
 
     dev = qdev_new(TYPE_APPLE_SEP_SIM);
     a7iop = APPLE_A7IOP(dev);
     s = APPLE_SEP_SIM(dev);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
@@ -1028,9 +1029,9 @@ AppleSEPSimState *apple_sep_sim_create(DTBNode *node, bool modern)
 
     qemu_mutex_init(&s->lock);
 
-    child = dtb_get_node(node, "iop-sep-nub");
+    child = apple_dt_get_node(node, "iop-sep-nub");
     g_assert_nonnull(child);
-    dtb_remove_node_named(child, "Lynx");
+    apple_dt_remove_node_named(child, "Lynx");
     return s;
 }
 

@@ -1,5 +1,5 @@
 /*
- * Apple t8030 SoC.
+ * Apple T8030 SoC (iPhone 11).
  *
  * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
  * Copyright (c) 2023-2025 Christian Inci (chris-pcguy).
@@ -51,14 +51,14 @@ typedef enum {
 typedef struct {
     MachineState parent;
 
-    hwaddr soc_base_pa;
-    hwaddr soc_size;
+    hwaddr armio_base;
+    hwaddr armio_size;
     unsigned long dram_size;
     AppleA13State *cpus[A13_MAX_CPU];
     AppleA13Cluster clusters[A13_MAX_CLUSTER];
     SysBusDevice *aic;
     MachoHeader64 *kernel;
-    DTBNode *device_tree;
+    AppleDTNode *device_tree;
     uint8_t *trustcache;
     char *securerom;
     gsize securerom_size;

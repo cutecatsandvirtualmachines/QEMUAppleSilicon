@@ -1,7 +1,7 @@
 #ifndef APPLE_AIC_H
 #define APPLE_AIC_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 #include "qom/object.h"
 
@@ -38,7 +38,7 @@ struct AppleAICState {
 };
 
 
-SysBusDevice *apple_aic_create(uint32_t numCPU, DTBNode *node,
-                               DTBNode *timebase_node);
+SysBusDevice *apple_aic_create(uint32_t numCPU, AppleDTNode *node,
+                               AppleDTNode *timebase_node);
 
 #endif /* APPLE_AIC_H */

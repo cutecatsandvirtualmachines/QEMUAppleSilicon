@@ -1,8 +1,33 @@
+/*
+ * Apple General-Purpose Input/Output.
+ *
+ * Copyright (c) 2024-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/gpio/apple_gpio.h"
 #include "hw/irq.h"
 #include "migration/vmstate.h"
+#include "qapi/error.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
@@ -395,8 +420,8 @@ static const MemoryRegionOps gpio_reg_ops = {
     .valid.unaligned = false,
 };
 
-DeviceState *apple_gpio_create(const char *name, uint64_t mmio_size,
-                               uint32_t pin_count, uint32_t irq_group_count)
+DeviceState *apple_gpio_new(const char *name, uint64_t mmio_size,
+                            uint32_t pin_count, uint32_t irq_group_count)
 {
     int i;
     DeviceState *dev;
@@ -439,27 +464,18 @@ DeviceState *apple_gpio_create(const char *name, uint64_t mmio_size,
     return dev;
 }
 
-DeviceState *apple_gpio_create_from_node(DTBNode *node)
+DeviceState *apple_gpio_from_node(AppleDTNode *node)
 {
-    DTBProp *reg;
-    DTBProp *name;
-    DTBProp *pins;
-    DTBProp *int_groups;
+    AppleDTProp *reg;
 
-    g_assert_nonnull(node);
-
-    reg = dtb_find_prop(node, "reg");
+    reg = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(reg);
-    name = dtb_find_prop(node, "name");
-    g_assert_nonnull(name);
-    pins = dtb_find_prop(node, "#gpio-pins");
-    g_assert_nonnull(pins);
-    int_groups = dtb_find_prop(node, "#gpio-int-groups");
-    g_assert_nonnull(int_groups);
 
-    return apple_gpio_create((char *)name->data,
-                             ldq_le_p(reg->data + sizeof(uint64_t)),
-                             ldl_le_p(pins->data), ldl_le_p(int_groups->data));
+    return apple_gpio_new(
+        apple_dt_get_prop_str(node, "name", &error_fatal),
+        ldq_le_p(reg->data + sizeof(uint64_t)),
+        apple_dt_get_prop_u32(node, "#gpio-pins", &error_fatal),
+        apple_dt_get_prop_u32(node, "#gpio-int-groups", &error_fatal));
 }
 
 static const VMStateDescription vmstate_apple_gpio = {
@@ -469,6 +485,9 @@ static const VMStateDescription vmstate_apple_gpio = {
     .fields =
         (const VMStateField[]){
             VMSTATE_UINT32(npl, AppleGPIOState),
+            VMSTATE_UINT32(pin_count, AppleGPIOState),
+            VMSTATE_UINT32(int_config_len, AppleGPIOState),
+            VMSTATE_UINT32(in_len, AppleGPIOState),
             VMSTATE_VARRAY_UINT32_ALLOC(gpio_cfg, AppleGPIOState, pin_count, 0,
                                         vmstate_info_uint32, uint32_t),
             VMSTATE_VARRAY_UINT32_ALLOC(int_config, AppleGPIOState,

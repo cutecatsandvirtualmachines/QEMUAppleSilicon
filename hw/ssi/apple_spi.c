@@ -1,10 +1,11 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/dma/apple_sio.h"
 #include "hw/irq.h"
 #include "hw/ssi/apple_spi.h"
 #include "hw/ssi/ssi.h"
 #include "migration/vmstate.h"
+#include "qapi/error.h"
 #include "qemu/error-report.h"
 #include "qemu/fifo32.h"
 #include "qemu/log.h"
@@ -469,19 +470,18 @@ static void apple_spi_realize(DeviceState *dev, struct Error **errp)
     }
 }
 
-SysBusDevice *apple_spi_create(DTBNode *node)
+SysBusDevice *apple_spi_from_node(AppleDTNode *node)
 {
     DeviceState *dev = qdev_new(TYPE_APPLE_SPI);
     SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
     AppleSPIState *s = APPLE_SPI(dev);
-    DTBProp *prop = dtb_find_prop(node, "reg");
+    AppleDTProp *prop = apple_dt_get_prop(node, "reg");
     uint64_t mmio_size = ((hwaddr *)prop->data)[1];
 
-    prop = dtb_find_prop(node, "name");
-    dev->id = g_strdup((const char *)prop->data);
+    dev->id = apple_dt_get_prop_strdup(node, "name", &error_fatal);
     s->mmio_size = mmio_size;
 
-    if ((prop = dtb_find_prop(node, "dma-channels")) != NULL) {
+    if ((prop = apple_dt_get_prop(node, "dma-channels")) != NULL) {
         uint32_t *data = (uint32_t *)prop->data;
         s->dma_capable = true;
         s->tx_chan_id = data[0];

@@ -21,6 +21,8 @@
 #include "qemu/osdep.h"
 #include "hw/block/apple-silicon/ans.h"
 #include "hw/irq.h"
+#include "hw/misc/apple-silicon/a7iop/rtkit.h"
+#include "hw/nvme/nvme.h"
 #include "hw/pci/msi.h"
 #include "migration/vmstate.h"
 #include "qemu/log.h"
@@ -211,14 +213,14 @@ static const AppleRTKitOps ans_rtkit_ops = {
     .wakeup = apple_ans_start,
 };
 
-SysBusDevice *apple_ans_create(DTBNode *node, AppleA7IOPVersion version,
-                               uint32_t protocol_version, PCIBus *pci_bus)
+SysBusDevice *apple_ans_from_node(AppleDTNode *node, AppleA7IOPVersion version,
+                                  uint32_t protocol_version, PCIBus *pci_bus)
 {
     DeviceState *dev;
     AppleANSState *s;
     SysBusDevice *sbd;
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
     uint64_t *reg;
     MemoryRegion *alias;
     PCIDevice *pci_dev;
@@ -227,7 +229,7 @@ SysBusDevice *apple_ans_create(DTBNode *node, AppleA7IOPVersion version,
     s = APPLE_ANS(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;
@@ -250,11 +252,11 @@ SysBusDevice *apple_ans_create(DTBNode *node, AppleA7IOPVersion version,
     sysbus_init_irq(sbd, &s->irq);
     qdev_init_gpio_in_named(dev, apple_ans_set_irq, "interrupt_pci", 1);
 
-    child = dtb_get_node(node, "iop-ans-nub");
+    child = apple_dt_get_node(node, "iop-ans-nub");
     g_assert_nonnull(child);
 
-    dtb_set_prop_u32(child, "pre-loaded", 1);
-    dtb_set_prop_u32(child, "running", 1);
+    apple_dt_set_prop_u32(child, "pre-loaded", 1);
+    apple_dt_set_prop_u32(child, "running", 1);
 
     s->pci_bus = pci_bus;
     pci_dev = pci_new(-1, TYPE_NVME);

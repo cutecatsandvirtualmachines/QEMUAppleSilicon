@@ -1,4 +1,6 @@
 /*
+ * Apple OS Boot Logic.
+ *
  * Copyright (c) 2023-2025 Visual Ehrmanntraut.
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -22,7 +24,7 @@
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 
 #define LC_SYMTAB (0x2)
 #define LC_UNIXTHREAD (0x5)
@@ -312,74 +314,76 @@ typedef struct {
     uint8_t boot_nonce_hash[XNU_BNCH_SIZE];
 } AppleBootInfo;
 
-MachoHeader64 *macho_load_file(const char *filename,
-                               MachoHeader64 **secure_monitor);
+MachoHeader64 *apple_boot_load_macho_file(const char *filename,
+                                          MachoHeader64 **secure_monitor);
 
-MachoHeader64 *macho_parse(uint8_t *data, uint32_t len);
+MachoHeader64 *apple_boot_parse_macho(uint8_t *data, uint32_t len);
 
-uint8_t *macho_get_buffer(MachoHeader64 *hdr);
+uint8_t *apple_boot_get_macho_buffer(MachoHeader64 *hdr);
 
-void macho_free(MachoHeader64 *hdr);
+uint32_t apple_boot_build_version(MachoHeader64 *mh);
 
-uint32_t macho_build_version(MachoHeader64 *mh);
+uint32_t apple_boot_platform(MachoHeader64 *mh);
 
-uint32_t macho_platform(MachoHeader64 *mh);
+const char *apple_boot_platform_string(MachoHeader64 *mh);
 
-const char *macho_platform_string(MachoHeader64 *mh);
+void apple_boot_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,
+                               uint64_t *highaddr);
 
-void macho_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,
-                          uint64_t *highaddr);
+void apple_boot_text_base(MachoHeader64 *mh, uint64_t *text_base);
 
-void macho_text_base(MachoHeader64 *mh, uint64_t *text_base);
+MachoFilesetEntryCommand *apple_boot_get_fileset(MachoHeader64 *header,
+                                                 const char *entry);
 
-MachoFilesetEntryCommand *macho_get_fileset(MachoHeader64 *header,
-                                            const char *entry);
+MachoHeader64 *apple_boot_get_fileset_header(MachoHeader64 *header,
+                                             const char *entry);
 
-MachoHeader64 *macho_get_fileset_header(MachoHeader64 *header,
-                                        const char *entry);
+MachoSegmentCommand64 *apple_boot_get_segment(MachoHeader64 *header,
+                                              const char *segname);
 
-MachoSegmentCommand64 *macho_get_segment(MachoHeader64 *header,
-                                         const char *segname);
-
-MachoSection64 *macho_get_section(MachoSegmentCommand64 *seg, const char *name);
+MachoSection64 *apple_boot_get_section(MachoSegmentCommand64 *seg,
+                                       const char *name);
 
 /// Modify a XNU virtual address to be fixed up and slide-adjusted.
-hwaddr xnu_fixup_slide_va(hwaddr va);
+hwaddr apple_boot_fixup_slide_va(hwaddr va);
 
 /// Convert a XNU virtual address to a host pointer.
-void *xnu_va_to_ptr(hwaddr va);
+void *apple_boot_va_to_ptr(hwaddr va);
 
-bool xnu_contains_boot_arg(const char *bootArgs, const char *arg,
-                           bool prefixmatch);
+bool apple_boot_contains_boot_arg(const char *bootArgs, const char *arg,
+                                  bool prefixmatch);
 
-void apple_monitor_setup_boot_args(
+void apple_boot_setup_monitor_boot_args(
     AddressSpace *as, MemoryRegion *mem, hwaddr bootargs_addr, hwaddr virt_base,
     hwaddr phys_base, hwaddr mem_size, hwaddr kern_args, hwaddr kern_entry,
     hwaddr kern_phys_base, hwaddr kern_phys_slide, hwaddr kern_virt_slide,
     hwaddr kern_text_section_off);
-void macho_setup_bootargs(uint32_t build_version, AddressSpace *as,
-                          MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
-                          hwaddr phys_base, hwaddr mem_size, hwaddr kernel_top,
-                          hwaddr dtb_va, hwaddr dtb_size,
-                          AppleVideoArgs *video_args, const char *cmdline,
-                          hwaddr mem_size_actual);
+void apple_boot_setup_bootargs(uint32_t build_version, AddressSpace *as,
+                               MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
+                               hwaddr phys_base, hwaddr mem_size,
+                               hwaddr kernel_top, hwaddr dtb_va,
+                               hwaddr dtb_size, AppleVideoArgs *video_args,
+                               const char *cmdline, hwaddr mem_size_actual);
 
-void macho_allocate_segment_records(DTBNode *memory_map, MachoHeader64 *mh);
+void apple_boot_allocate_segment_records(AppleDTNode *memory_map,
+                                         MachoHeader64 *mh);
 
-hwaddr arm_load_macho(MachoHeader64 *mh, AddressSpace *as, MemoryRegion *mem,
-                      DTBNode *memory_map, hwaddr phys_base, hwaddr virt_slide);
+hwaddr apple_boot_load_macho(MachoHeader64 *mh, AddressSpace *as,
+                             MemoryRegion *mem, AppleDTNode *memory_map,
+                             hwaddr phys_base, hwaddr virt_slide);
 
-void macho_load_raw_file(const char *filename, AddressSpace *as,
-                         MemoryRegion *mem, hwaddr file_pa, uint64_t *size);
+void apple_boot_load_raw_file(const char *filename, AddressSpace *as,
+                              MemoryRegion *mem, hwaddr file_pa,
+                              uint64_t *size);
 
-DTBNode *load_dtb_from_file(const char *filename);
+AppleDTNode *apple_boot_load_dt_file(const char *filename);
 
-void macho_populate_dtb(DTBNode *root, AppleBootInfo *info);
+void apple_boot_populate_dt(AppleDTNode *root, AppleBootInfo *info);
 
-void macho_load_dtb(DTBNode *root, AddressSpace *as, MemoryRegion *mem,
-                    AppleBootInfo *info);
+void apple_boot_finalise_dt(AppleDTNode *root, AddressSpace *as,
+                            MemoryRegion *mem, AppleBootInfo *info);
 
-uint8_t *load_trustcache_from_file(const char *filename, uint64_t *size);
+uint8_t *apple_boot_load_trustcache_file(const char *filename, uint64_t *size);
 
 void macho_load_ramdisk(const char *filename, AddressSpace *as,
                         MemoryRegion *mem, hwaddr pa, uint64_t *size);

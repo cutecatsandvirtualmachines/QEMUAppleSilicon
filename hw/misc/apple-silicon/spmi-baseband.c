@@ -1,5 +1,4 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
 #include "hw/irq.h"
 #include "hw/misc/apple-silicon/spmi-baseband.h"
 #include "migration/vmstate.h"
@@ -85,13 +84,13 @@ static int apple_spmi_baseband_command(SPMISlave *s, uint8_t opcode,
     }
 }
 
-DeviceState *apple_spmi_baseband_create(DTBNode *node)
+DeviceState *apple_spmi_baseband_create(AppleDTNode *node)
 {
     DeviceState *dev = qdev_new(TYPE_APPLE_SPMI_BASEBAND);
     AppleSPMIBasebandState *p = APPLE_SPMI_BASEBAND(dev);
-    DTBProp *prop;
+    AppleDTProp *prop;
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
     spmi_set_slave_sid(SPMI_SLAVE(dev), *(uint32_t *)prop->data);
 

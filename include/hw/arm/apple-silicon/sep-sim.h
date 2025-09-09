@@ -21,7 +21,7 @@
 #define HW_ARM_APPLE_SILICON_SEP_SIM_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/misc/apple-silicon/a7iop/core.h"
 #include "hw/sysbus.h"
 #include "qom/object.h"
@@ -66,6 +66,6 @@ struct AppleSEPSimState {
     AppleSEPSimOOLState ool_state[SEP_ENDPOINT_MAX];
 };
 
-AppleSEPSimState *apple_sep_sim_create(DTBNode *node, bool modern);
+AppleSEPSimState *apple_sep_sim_from_node(AppleDTNode *node, bool modern);
 
 #endif /* HW_ARM_APPLE_SILICON_SEP_SIM_H */

@@ -26,7 +26,7 @@
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 
 extern hwaddr g_virt_base;
 extern hwaddr g_phys_base;
@@ -49,8 +49,9 @@ void allocate_ram(MemoryRegion *top, const char *name, hwaddr addr, hwaddr size,
 typedef struct CarveoutAllocator CarveoutAllocator;
 
 /// Creates a new carveout allocator
-CarveoutAllocator *carveout_alloc_new(DTBNode *carveout_mmap, hwaddr dram_base,
-                                      hwaddr dram_size, hwaddr alignment);
+CarveoutAllocator *carveout_alloc_new(AppleDTNode *carveout_mmap,
+                                      hwaddr dram_base, hwaddr dram_size,
+                                      hwaddr alignment);
 /// Returns the address of the allocated region.
 hwaddr carveout_alloc_mem(CarveoutAllocator *ca, hwaddr size);
 /// Returns the kernel region size.

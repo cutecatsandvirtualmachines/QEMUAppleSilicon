@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2025 Christian Inci (chris-pcguy).
- *
  * Apple PCIe IP block emulation
  * Frankenstein's monster built from gutted designware/xiling/pnv_phb and others
+ *
+ * Copyright (c) 2025 Christian Inci (chris-pcguy).
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -188,14 +188,15 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
     if (port->msi.intr[msi_intr_index].status &
         ~port->msi.intr[msi_intr_index].mask) {
 #endif
-    //uint32_t status = BIT(data) & port->msi.intr[msi_intr_index].enable;
-    uint32_t status = BIT(msi_intr_index) &
-                      port->msi.intr[msi_intr_index].enable;
+    // uint32_t status = BIT(data) & port->msi.intr[msi_intr_index].enable;
+    uint32_t status =
+        BIT(msi_intr_index) & port->msi.intr[msi_intr_index].enable;
     uint32_t msi_interrupt = host->pcie->msi_vector_offset + data;
-    DPRINTF("%s: status: 0x%x ; msi_enable: 0x%x ; BIT(msi_intr_index): 0x%"
-            PRIX64 " ; msi_intr_index: 0x%x ; msi_interrupt: %d/0x%x\n",
-            __func__, status, port->msi.intr[msi_intr_index].enable,
-            BIT(msi_intr_index), msi_intr_index, msi_interrupt, msi_interrupt);
+    DPRINTF(
+        "%s: status: 0x%x ; msi_enable: 0x%x ; BIT(msi_intr_index): 0x%" PRIX64
+        " ; msi_intr_index: 0x%x ; msi_interrupt: %d/0x%x\n",
+        __func__, status, port->msi.intr[msi_intr_index].enable,
+        BIT(msi_intr_index), msi_intr_index, msi_interrupt, msi_interrupt);
 
     status = true;
     // status might be msi_intr_index
@@ -203,11 +204,11 @@ static void apple_pcie_port_msi_write(void *opaque, hwaddr addr, uint64_t data,
         // iOS will only acknowledge the interrupt when it expects it, and will
         // cause an interrupt storm otherwise
         // need to find a place to quisce it properly
-        //apple_aic_unmask_interrupt(msi_interrupt);
+        // apple_aic_unmask_interrupt(msi_interrupt);
         qemu_set_irq(host->msi_irqs[bus_nr * 8 + msi_intr_index], 1);
-        //apple_aic_mask_interrupt(msi_interrupt);
-        // pulsing doesn't work.
-        // qemu_irq_pulse(host->msi_irqs[bus_nr * 8 + msi_intr_index]);
+        // apple_aic_mask_interrupt(msi_interrupt);
+        //  pulsing doesn't work.
+        //  qemu_irq_pulse(host->msi_irqs[bus_nr * 8 + msi_intr_index]);
     }
 }
 
@@ -1451,14 +1452,14 @@ static void apple_pcie_host_reset(DeviceState *dev)
     memset(host->root_common_regs, 0, sizeof(host->root_common_regs));
 }
 
-static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
+static ApplePCIEPort *apple_pcie_create_port(AppleDTNode *node, uint32_t bus_nr,
                                              qemu_irq irq, PCIBus *bus,
                                              ApplePCIEHost *host)
 {
     // DeviceState *dev;
     PCIDevice *pci_dev;
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
     // ApplePCIEHost *s;
     char link_name[16];
     char bridge_node_name[16];
@@ -1475,13 +1476,13 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
     // "pcie.bridge%u.secbus", bus_nr);
     snprintf(bridge_node_name, sizeof(bridge_node_name), "pci-bridge%u",
              bus_nr);
-    child = dtb_get_node(node, bridge_node_name);
+    child = apple_dt_get_node(node, bridge_node_name);
 #if 0
     if (child != NULL) {
         // only on S8000
         g_assert_nonnull(child);
 
-        prop = dtb_find_prop(child, "function-clkreq");
+        prop = apple_dt_find_prop(child, "function-clkreq");
         g_assert_nonnull(prop);
         if (prop->length == 16) {
             armfunc = (uint32_t *)prop->data;
@@ -1496,13 +1497,13 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
     ApplePCIEPort *port = APPLE_PCIE_PORT(pci_dev);
     port->host = host;
 
-    if (child != NULL) {
-        g_assert_nonnull(child);
-        prop = dtb_find_prop(child, "manual-enable");
-        port->manual_enable = (prop != NULL);
-    } else {
+    if (child == NULL) {
         port->manual_enable = false;
+    } else {
+        prop = apple_dt_get_prop(child, "manual-enable");
+        port->manual_enable = (prop != NULL);
     }
+
     if (host->pcie->chip_id == 0x8020 || host->pcie->chip_id == 0x8030) {
         // device_id = 0x1002;
         // device_id = 0x1003;
@@ -1519,24 +1520,23 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
         // widths:
         // T8030: baseband: X2 (not shown in the device tree, but maybe
         // implied by the speed value)
-        prop = dtb_find_prop(child, "maximum-link-speed");
-        g_assert_nonnull(prop);
-        port->maximum_link_speed = *(uint32_t *)prop->data;
+        port->maximum_link_speed =
+            apple_dt_get_prop_u32(child, "maximum-link-speed", &error_fatal);
 
         // TODO: manual-enable/function-pcie_port_control
-        // dtb_remove_prop_named(child, "manual-enable");
-        // dtb_remove_prop_named(child, "manual-enable-s2r");
+        // apple_dt_remove_prop_named(child, "manual-enable");
+        // apple_dt_remove_prop_named(child, "manual-enable-s2r");
 
-        // dtb_set_prop_u32(child, "ignore-link-speed-mismatch", 1);
-        ////dtb_set_prop_u32(child, "ignore-link-width-mismatch", 1);
-        //////dtb_remove_prop_named(child, "maximum-link-speed");
-        // dtb_set_prop_u32(child, "no-refclk-gating", 1);
-        // dtb_set_prop_u32(child, "allow-endpoint-reset", 0);
-        ////dtb_set_prop_u32(child, "clkreq-wait-time", 100);
-        // dtb_set_prop_u32(child, "ltssm-timeout", 0);
+        // apple_dt_set_prop_u32(child, "ignore-link-speed-mismatch", 1);
+        ////apple_dt_set_prop_u32(child, "ignore-link-width-mismatch", 1);
+        //////apple_dt_remove_prop_named(child, "maximum-link-speed");
+        // apple_dt_set_prop_u32(child, "no-refclk-gating", 1);
+        // apple_dt_set_prop_u32(child, "allow-endpoint-reset", 0);
+        ////apple_dt_set_prop_u32(child, "clkreq-wait-time", 100);
+        // apple_dt_set_prop_u32(child, "ltssm-timeout", 0);
 
         // TODO: for S800x, until the GPIO shitshow gets fixed
-        // dtb_remove_prop_named(child, "clkreq-wait-time");
+        // apple_dt_remove_prop_named(child, "clkreq-wait-time");
 
         dart = APPLE_DART(object_property_get_link(OBJECT(qdev_get_machine()),
                                                    dart_name, &error_fatal));
@@ -1559,44 +1559,44 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
         qdev_init_gpio_in_named(DEVICE(port), apcie_port_gpio_perst,
                                 APCIE_PORT_GPIO_PERST, 1);
 
-        connect_function_prop_in_out_gpio(
-            DEVICE(port), dtb_find_prop(child, "function-clkreq"),
+        apple_dt_connect_function_prop_in_out_gpio(
+            DEVICE(port), apple_dt_get_prop(child, "function-clkreq"),
             APCIE_PORT_GPIO_CLKREQ_OUT);
-        connect_function_prop_out_in_gpio(
-            DEVICE(port), dtb_find_prop(child, "function-perst"),
+        apple_dt_connect_function_prop_out_in_gpio(
+            DEVICE(port), apple_dt_get_prop(child, "function-perst"),
             APCIE_PORT_GPIO_PERST);
 #if 0
-        connect_function_prop_out_in(DEVICE(dart), DEVICE(port), dtb_find_prop(child,
+        apple_dt_connect_function_prop_out_in(DEVICE(dart), DEVICE(port), apple_dt_find_prop(child,
                                 "function-dart_force_active"),
                                 DART_DART_FORCE_ACTIVE);
-        connect_function_prop_out_in(DEVICE(dart), DEVICE(port), dtb_find_prop(child,
+        apple_dt_connect_function_prop_out_in(DEVICE(dart), DEVICE(port), apple_dt_find_prop(child,
                                 "function-dart_request_sid"),
                                 DART_DART_REQUEST_SID);
-        connect_function_prop_out_in(DEVICE(dart), DEVICE(port), dtb_find_prop(child,
+        apple_dt_connect_function_prop_out_in(DEVICE(dart), DEVICE(port), apple_dt_find_prop(child,
                                 "function-dart_release_sid"),
                                 DART_DART_RELEASE_SID);
-        connect_function_prop_out_in(DEVICE(dart), DEVICE(port), dtb_find_prop(child,
+        apple_dt_connect_function_prop_out_in(DEVICE(dart), DEVICE(port), apple_dt_find_prop(child,
                                 "function-dart_self"),
                                 DART_DART_SELF);
 #endif
 #if 1
-        // dtb_remove_prop_named(child, "function-dart_force_active");
-        // dtb_remove_prop_named(child, "function-dart_request_sid");
-        // dtb_remove_prop_named(child, "function-dart_release_sid");
-        // dtb_remove_prop_named(child, "function-dart_self");
+        // apple_dt_remove_prop_named(child, "function-dart_force_active");
+        // apple_dt_remove_prop_named(child, "function-dart_request_sid");
+        // apple_dt_remove_prop_named(child, "function-dart_release_sid");
+        // apple_dt_remove_prop_named(child, "function-dart_self");
 #if 0
-        dtb_remove_prop_named(child, "pci-l1pm-control");
-        dtb_remove_prop_named(child, "manual-enable-s2r");
-        dtb_remove_prop_named(child, "pci-aspm-default");
-        dtb_remove_prop_named(child, "pci-l1pm-control-postrom");
-        dtb_remove_prop_named(child, "pci-l1pm-control-a0");
-        //dtb_remove_prop_named(child, "");
+        apple_dt_remove_prop_named(child, "pci-l1pm-control");
+        apple_dt_remove_prop_named(child, "manual-enable-s2r");
+        apple_dt_remove_prop_named(child, "pci-aspm-default");
+        apple_dt_remove_prop_named(child, "pci-l1pm-control-postrom");
+        apple_dt_remove_prop_named(child, "pci-l1pm-control-a0");
+        //apple_dt_remove_prop_named(child, "");
 #endif
 #if 0
-        dtb_set_prop_null(child, "pci-wake-l1pm-disable");
-        child = dtb_get_node(child, "baseband-pcie");
+        apple_dt_set_prop_null(child, "pci-wake-l1pm-disable");
+        child = apple_dt_get_node(child, "baseband-pcie");
         if (child != NULL) {
-            dtb_set_prop_null(child, "pci-wake-l1pm-disable");
+            apple_dt_set_prop_null(child, "pci-wake-l1pm-disable");
         }
 #endif
 #endif
@@ -1649,7 +1649,7 @@ static ApplePCIEPort *apple_pcie_create_port(DTBNode *node, uint32_t bus_nr,
     return port;
 }
 
-SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
+SysBusDevice *apple_pcie_from_node(AppleDTNode *node, uint32_t chip_id)
 {
     DeviceState *dev;
     ApplePCIEState *s;
@@ -1661,7 +1661,7 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
     // size_t i;
     int i, j;
     int mmio_index = 0;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
     char temp_name[32];
 
@@ -1678,13 +1678,12 @@ SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id)
     s->chip_id = chip_id;
 
     s->node = node;
-    prop = dtb_find_prop(s->node, "reg");
+    prop = apple_dt_get_prop(s->node, "reg");
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
-    prop = dtb_find_prop(s->node, "msi-vector-offset");
-    g_assert_nonnull(prop);
-    s->msi_vector_offset = *(uint32_t*)prop->data;
+    s->msi_vector_offset =
+        apple_dt_get_prop_u32(s->node, "msi-vector-offset", &error_fatal);
 
     for (i = 0; i < ARRAY_SIZE(host->irqs); i++) {
         sysbus_init_irq(sbd, &host->irqs[i]);

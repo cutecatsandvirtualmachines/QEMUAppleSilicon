@@ -22,7 +22,7 @@
 #define HW_ARM_APPLE_SILICON_SEP_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/i2c/i2c.h"
 #include "hw/misc/apple-silicon/a7iop/core.h"
 #include "hw/sysbus.h"
@@ -308,9 +308,10 @@ struct AppleSEPState {
     uint16_t key_fcfg_offset_0x14_values[5];
 };
 
-AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
-                                uint32_t cpu_id, uint32_t build_version,
-                                bool modern, uint32_t chip_id);
+AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
+                                   vaddr base, uint32_t cpu_id,
+                                   uint32_t build_version, bool modern,
+                                   uint32_t chip_id);
 
 AppleSSCState *apple_ssc_create(MachineState *machine, uint8_t addr);
 

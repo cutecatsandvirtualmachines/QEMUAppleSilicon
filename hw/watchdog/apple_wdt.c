@@ -1,5 +1,4 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
 #include "hw/irq.h"
 #include "hw/watchdog/apple_wdt.h"
 #include "migration/vmstate.h"
@@ -245,23 +244,21 @@ static void apple_wdt_unrealize(DeviceState *dev)
     s->timer = NULL;
 }
 
-SysBusDevice *apple_wdt_create(DTBNode *node)
+SysBusDevice *apple_wdt_from_node(AppleDTNode *node)
 {
     DeviceState *dev;
     AppleWDTState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
 
     dev = qdev_new(TYPE_APPLE_WDT);
     s = APPLE_WDT(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    prop = dtb_find_prop(node, "wdt-version");
-    g_assert_nonnull(prop);
-    *(uint32_t *)prop->data = 1;
+    apple_dt_set_prop_u32(node, "wdt-version", 1);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;

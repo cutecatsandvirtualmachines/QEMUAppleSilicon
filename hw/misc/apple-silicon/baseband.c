@@ -18,7 +18,7 @@
  */
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/irq.h"
 #include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/misc/apple-silicon/baseband.h"
@@ -85,7 +85,8 @@ assignPipeMemory: 0x800 (twice)
 
 -
 
-TR TIA and CR HIA are base, while TR HIA and CR TIA are end? Did Apple mixed something up in printContextInfo?
+TR TIA and CR HIA are base, while TR HIA and CR TIA are end? Did Apple mixed
+something up in printContextInfo?
 
 */
 
@@ -379,7 +380,7 @@ apple_baseband_device_print_context_info(AppleBasebandDeviceState *s)
         DPRINTF("%s: field_64: 0x%x\n", __func__,
                 s->baseband_context0.field_64);
     }
-    //vm_stop(RUN_STATE_PAUSED);
+    // vm_stop(RUN_STATE_PAUSED);
 }
 
 static void
@@ -406,10 +407,10 @@ apple_baseband_device_update_image_doorbell(AppleBasebandDeviceState *s)
         HEXDUMP("image_first_0x100 bytes", s->image_ptr,
                 MIN(s->image_size, 0x100));
         // s->boot_stage = 1;
-        //s->boot_stage += 1;
+        // s->boot_stage += 1;
 #if 1
-        //apple_baseband_set_irq(baseband, 0, 1);
-        // apple_pcie_port_temp_lower_msi_irq(port, 0);
+        // apple_baseband_set_irq(baseband, 0, 1);
+        //  apple_pcie_port_temp_lower_msi_irq(port, 0);
 #endif
     }
 }
@@ -437,26 +438,28 @@ static void apple_baseband_device_bar0_write(void *opaque, hwaddr addr,
         apple_baseband_set_irq(baseband, 0, 1);
         break;
     case 0x90: // ICEBBRTIDevice::updateControl
-        //apple_pcie_port_temp_lower_msi_irq(port, 0);
-        // bit0 // ICEBBRTIDevice::engage
+        // apple_pcie_port_temp_lower_msi_irq(port, 0);
+        //  bit0 // ICEBBRTIDevice::engage
         if ((data & 1) != 0) {
-            //s->status = 0x1;
+            // s->status = 0x1;
             s->status = 0x2;
             s->boot_stage = 0x3;
-            //apple_baseband_set_irq(baseband, 0, 1);
-            //baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset detected
+            // apple_baseband_set_irq(baseband, 0, 1);
+            // baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset
+            // detected
         }
         // bit1 // ICEBBRTIDevice::initCheck
         if ((data & 2) != 0) {
             apple_baseband_device_print_context_info(s);
-            //apple_baseband_set_irq(baseband, 0, 1);
-            //s->status = 0x2;
-            // s->status = 0x0;
-            // s->boot_stage = 0x0;
-            //s->status = 0x4;
-            //s->boot_stage = 0x4;
-            //baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset detected
-            // baseband_gpio_set_reset_det(DEVICE(s), 1); // 1 means 0 == alive
+            // apple_baseband_set_irq(baseband, 0, 1);
+            // s->status = 0x2;
+            //  s->status = 0x0;
+            //  s->boot_stage = 0x0;
+            // s->status = 0x4;
+            // s->boot_stage = 0x4;
+            // baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset
+            // detected
+            //  baseband_gpio_set_reset_det(DEVICE(s), 1); // 1 means 0 == alive
         }
         break;
     case 0xa0: // ICEBBRTIDevice::updateSleepControl
@@ -535,7 +538,8 @@ static void apple_baseband_device_bar1_write(void *opaque, hwaddr addr,
         s->window_limit_addr &= (0xffffffffull << 32);
         s->window_limit_addr |= ((data & UINT32_MAX) << 0);
         break;
-    case 0xa4: // ICEBBRTIDevice::updateWindowLimit ; DART window limit high ; fixed zero
+    case 0xa4: // ICEBBRTIDevice::updateWindowLimit ; DART window limit high ;
+               // fixed zero
         s->window_limit_addr &= (0xffffffffull << 32);
         s->window_limit_addr |= ((data & UINT32_MAX) << 0);
         break;
@@ -575,7 +579,7 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
         // baseband_gpio_set_reset_det(DEVICE(s), 1);
         break;
     case 0x4 ... 0x3c:
-        //custom_baseband0.unkn0 = 0xdead;
+        // custom_baseband0.unkn0 = 0xdead;
         custom_baseband0.unkn0 = 0x0;
         // correct chip id values according to libTelephonyUtilDynamic.dylib
         // custom_baseband0.chip_id = 0x60; // d101/d111 (iPhone 7/7+)
@@ -606,11 +610,11 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
         // ACIPCBTIDevice::successExitCode: says 0x1 only
         // IOACIPCBTIDevice::successExitCode: says 0x1 and/or 0x10.
         val = 0x1;
-        //apple_pcie_port_temp_lower_msi_irq(port, 0);
+        // apple_pcie_port_temp_lower_msi_irq(port, 0);
         break;
     case 0x64 ... 0x70: // ICEBBBTIDevice::msiInterrupt
         val = 0x0;
-        //apple_pcie_port_temp_lower_msi_irq(port, 0);
+        // apple_pcie_port_temp_lower_msi_irq(port, 0);
         break;
     case 0x88: // ICEBBRTIDevice::getImageSize
         val = s->image_size;
@@ -1005,14 +1009,14 @@ static uint8_t smc_key_gP11_write(AppleSMCState *s, SMCKey *key,
     }
 }
 
-SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus,
+SysBusDevice *apple_baseband_create(AppleDTNode *node, PCIBus *pci_bus,
                                     ApplePCIEPort *port)
 {
     DeviceState *dev;
     AppleBasebandState *s;
     SysBusDevice *sbd;
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
     uint64_t *reg;
     MemoryRegion *alias;
     PCIDevice *pci_dev;
@@ -1022,7 +1026,7 @@ SysBusDevice *apple_baseband_create(DTBNode *node, PCIBus *pci_bus,
     sbd = SYS_BUS_DEVICE(dev);
 
 #if 0
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_find_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;
@@ -1136,8 +1140,8 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
 #if 1
     memory_region_init(&s->container, OBJECT(s), "baseband-bar-container",
                        APPLE_BASEBAND_DEVICE_BAR0_SIZE +
-                       APPLE_BASEBAND_DEVICE_BAR1_SIZE +
-                       APPLE_BASEBAND_DEVICE_BAR2_SIZE);
+                           APPLE_BASEBAND_DEVICE_BAR1_SIZE +
+                           APPLE_BASEBAND_DEVICE_BAR2_SIZE);
 #endif
     // these aliases are needed, because iOS will mess with the pci subregions
     memory_region_init_alias(&s->bar0_alias, OBJECT(s), "baseband-bar0-alias",
@@ -1165,12 +1169,12 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
                                 &s->bar1_alias);
     memory_region_add_subregion(&s->container,
                                 APPLE_BASEBAND_DEVICE_BAR2_SIZE +
-                                APPLE_BASEBAND_DEVICE_BAR1_SIZE,
+                                    APPLE_BASEBAND_DEVICE_BAR1_SIZE,
                                 &s->bar0_alias);
 #endif
     memory_region_add_subregion(get_system_memory(),
                                 APCIE_ROOT_COMMON_ADDRESS +
-                                BASEBAND_BAR_SUB_ADDR + 0x0000,
+                                    BASEBAND_BAR_SUB_ADDR + 0x0000,
                                 &s->container);
     s->image_ptr = NULL;
 }
@@ -1193,7 +1197,7 @@ static void apple_baseband_device_qdev_reset_hold(Object *obj, ResetType type)
     s->gpio_coredump_val = 0;
     s->gpio_reset_det_val = 0;
     baseband_gpio_set_reset_det(DEVICE(s), 0); // 0 means 1 == reset detected
-    //baseband_gpio_set_reset_det(DEVICE(s), 1); // 1 means 0 == alive
+    // baseband_gpio_set_reset_det(DEVICE(s), 1); // 1 means 0 == alive
 
     // s->boot_stage = 0xfeedb007; // rom stage is legacy
     // s->boot_stage = 0xffffffff; // failed to read execution environment

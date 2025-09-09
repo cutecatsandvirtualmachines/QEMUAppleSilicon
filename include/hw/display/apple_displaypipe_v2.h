@@ -22,14 +22,14 @@
 
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/boot.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 
 #define TYPE_APPLE_DISPLAY_PIPE_V2 "apple-display-pipe-v2"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleDisplayPipeV2State, APPLE_DISPLAY_PIPE_V2);
 
-SysBusDevice *adp_v2_create(DTBNode *node, MemoryRegion *dma_mr,
-                            AppleVideoArgs *video_args, uint64_t vram_size);
+SysBusDevice *adp_v2_from_node(AppleDTNode *node, MemoryRegion *dma_mr,
+                               AppleVideoArgs *video_args, uint64_t vram_size);
 void adp_v2_update_vram_mapping(AppleDisplayPipeV2State *s, MemoryRegion *mr,
                                 hwaddr base);
 

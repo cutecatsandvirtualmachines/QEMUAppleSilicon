@@ -323,13 +323,13 @@ static void adp_v2_register_types(void)
 
 type_init(adp_v2_register_types);
 
-SysBusDevice *adp_v2_create(DTBNode *node, MemoryRegion *dma_mr,
-                            AppleVideoArgs *video_args, uint64_t vram_size)
+SysBusDevice *adp_v2_from_node(AppleDTNode *node, MemoryRegion *dma_mr,
+                               AppleVideoArgs *video_args, uint64_t vram_size)
 {
     DeviceState *dev;
     SysBusDevice *sbd;
     AppleDisplayPipeV2State *s;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
     MemoryRegion *mr;
 
@@ -357,9 +357,9 @@ SysBusDevice *adp_v2_create(DTBNode *node, MemoryRegion *dma_mr,
                            &error_fatal);
     object_property_add_const_link(OBJECT(s), "vram", OBJECT(&s->vram));
 
-    dtb_set_prop_u32(node, "dot-pitch", 326);
+    apple_dt_set_prop_u32(node, "dot-pitch", 326);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
     mr = g_new0(MemoryRegion, 5);
@@ -391,10 +391,10 @@ SysBusDevice *adp_v2_create(DTBNode *node, MemoryRegion *dma_mr,
     sysbus_init_mmio(sbd, mr + 3);
     sysbus_init_mmio(sbd, mr + 4);
 
-    prop = dtb_find_prop(node, "interrupts");
+    prop = apple_dt_get_prop(node, "interrupts");
     g_assert_nonnull(prop);
 
-    for (size_t i = 0; i < prop->length / sizeof(uint32_t); i++) {
+    for (size_t i = 0; i < prop->len / sizeof(uint32_t); i++) {
         sysbus_init_irq(sbd, &s->irqs[i]);
     }
 

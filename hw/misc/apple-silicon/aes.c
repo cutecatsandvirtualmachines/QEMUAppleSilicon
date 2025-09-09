@@ -1,6 +1,6 @@
 #include "qemu/osdep.h"
 #include "crypto/cipher.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/irq.h"
 #include "hw/misc/apple-silicon/aes.h"
 #include "hw/misc/apple-silicon/aes_reg.h"
@@ -679,12 +679,12 @@ static void apple_aes_unrealize(DeviceState *dev)
     qemu_mutex_destroy(&s->queue_mutex);
 }
 
-SysBusDevice *apple_aes_create(DTBNode *node, uint32_t board_id)
+SysBusDevice *apple_aes_create(AppleDTNode *node, uint32_t board_id)
 {
     DeviceState *dev;
     AppleAESState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
 
     dev = qdev_new(TYPE_APPLE_AES);
@@ -693,7 +693,7 @@ SysBusDevice *apple_aes_create(DTBNode *node, uint32_t board_id)
 
     s->board_id = board_id;
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;

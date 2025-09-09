@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2025 Christian Inci (chris-pcguy).
- *
  * Apple PCIe IP block emulation
  * Frankenstein's monster built from gutted designware/xiling
+ *
+ * Copyright (c) 2025 Christian Inci (chris-pcguy).
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,8 +22,7 @@
 #ifndef APCIE_H
 #define APCIE_H
 
-#include "hw/arm/apple-silicon/dtb.h"
-#include "hw/pci/pci_bridge.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/pci/pcie_host.h"
 #include "hw/pci/pcie_port.h"
 #include "hw/sysbus.h"
@@ -148,7 +147,7 @@ struct ApplePCIEState {
     SysBusDevice parent_obj;
 
     /*< public >*/
-    DTBNode *node;
+    AppleDTNode *node;
 
     ApplePCIEHost *host;
     ApplePCIEPort *ports[APCIE_MAX_PORTS];
@@ -159,6 +158,6 @@ struct ApplePCIEState {
 void port_devices_set_power(ApplePCIEPort *port, bool power);
 void apple_pcie_port_temp_lower_msi_irq(ApplePCIEPort *port,
                                         int msi_intr_index);
-SysBusDevice *apple_pcie_create(DTBNode *node, uint32_t chip_id);
+SysBusDevice *apple_pcie_from_node(AppleDTNode *node, uint32_t chip_id);
 
 #endif /* APCIE_H */

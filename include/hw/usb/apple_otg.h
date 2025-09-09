@@ -1,7 +1,7 @@
 #ifndef APPLE_OTG_H
 #define APPLE_OTG_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 #include "hw/usb/hcd-dwc2.h"
 #include "hw/usb/hcd-tcp.h"
@@ -28,5 +28,5 @@ struct AppleOTGState {
     bool dart;
 };
 
-DeviceState *apple_otg_create(DTBNode *node);
+DeviceState *apple_otg_from_node(AppleDTNode *node);
 #endif

@@ -1,7 +1,7 @@
 #ifndef HW_MISC_APPLE_SILICON_SPMI_BASEBAND_H
 #define HW_MISC_APPLE_SILICON_SPMI_BASEBAND_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/spmi/spmi.h"
 #include "qom/object.h"
 
@@ -19,5 +19,5 @@ struct AppleSPMIBasebandState {
 };
 
 void apple_spmi_baseband_set_irq(AppleSPMIBasebandState *s, int value);
-DeviceState *apple_spmi_baseband_create(DTBNode *node);
+DeviceState *apple_spmi_baseband_create(AppleDTNode *node);
 #endif /* HW_MISC_APPLE_SILICON_SPMI_BASEBAND_H */

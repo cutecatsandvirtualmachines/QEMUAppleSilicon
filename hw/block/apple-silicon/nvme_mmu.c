@@ -177,12 +177,12 @@ static void apple_nvme_mmu_start(AppleNVMeMMUState *s)
     g_assert_true(pci_dev->bus_master_enable_region.enabled);
 }
 
-SysBusDevice *apple_nvme_mmu_create(DTBNode *node, PCIBus *pci_bus)
+SysBusDevice *apple_nvme_mmu_from_node(AppleDTNode *node, PCIBus *pci_bus)
 {
     DeviceState *dev;
     AppleNVMeMMUState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
     PCIDevice *pci_dev;
 
@@ -204,7 +204,7 @@ SysBusDevice *apple_nvme_mmu_create(DTBNode *node, PCIBus *pci_bus)
                              &error_fatal);
     object_property_add_child(OBJECT(dev), "nvme", OBJECT(s->nvme));
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;

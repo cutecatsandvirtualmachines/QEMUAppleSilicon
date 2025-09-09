@@ -1,8 +1,6 @@
 /*
- * General Apple XNU utilities.
+ * Apple OS Boot Logic.
  *
- * Copyright (c) 2019 Jonathan Afek <jonyafek@me.com>
- * Copyright (c) 2021 Nguyen Hoang Trung (TrungNguyen1909)
  * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
  * Copyright (c) 2023-2025 Christian Inci (chris-pcguy).
  *
@@ -24,7 +22,7 @@
 #include "crypto/hash.h"
 #include "crypto/random.h"
 #include "hw/arm/apple-silicon/boot.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/arm/apple-silicon/mem.h"
 #include "qapi/error.h"
 #include "qemu/cutils.h"
@@ -234,23 +232,23 @@ static uint64_t sstrlen(const char *str)
     return end - str;
 }
 
-static void macho_dtb_node_process(DTBNode *node, DTBNode *parent)
+static void apple_boot_process_dt_node(AppleDTNode *node, AppleDTNode *parent)
 {
     GList *iter = NULL;
-    DTBNode *child = NULL;
-    DTBProp *prop = NULL;
+    AppleDTNode *child = NULL;
+    AppleDTProp *prop = NULL;
     uint64_t count;
     uint64_t i;
     bool found;
 
-    prop = dtb_find_prop(node, "compatible");
+    prop = apple_dt_get_prop(node, "compatible");
     if (prop != NULL) {
         g_assert_nonnull(prop->data);
         found = false;
         for (count = sizeof(KEEP_COMP) / sizeof(KEEP_COMP[0]), i = 0; i < count;
              i++) {
             if (memcmp(prop->data, KEEP_COMP[i],
-                       MIN(prop->length, sstrlen(KEEP_COMP[i]))) == 0) {
+                       MIN(prop->len, sstrlen(KEEP_COMP[i]))) == 0) {
                 found = true;
                 break;
             }
@@ -259,40 +257,40 @@ static void macho_dtb_node_process(DTBNode *node, DTBNode *parent)
             g_assert_nonnull(parent);
             DINFO("Removing node `%s` because its compatible property `%s` "
                   "is not whitelisted",
-                  dtb_find_prop(node, "name")->data, prop->data);
-            dtb_remove_node(parent, node);
+                  apple_dt_find_prop(node, "name")->data, prop->data);
+            apple_dt_remove_node(parent, node);
             return;
         }
     }
 
-    prop = dtb_find_prop(node, "name");
+    prop = apple_dt_get_prop(node, "name");
     if (prop != NULL) {
         g_assert_nonnull(prop->data);
         for (count = sizeof(REM_NAMES) / sizeof(REM_NAMES[0]), i = 0; i < count;
              i++) {
-            uint64_t size = MIN(prop->length, sstrlen(REM_NAMES[i]));
+            uint64_t size = MIN(prop->len, sstrlen(REM_NAMES[i]));
             if (memcmp(prop->data, REM_NAMES[i], size) == 0) {
                 g_assert_nonnull(parent);
                 DINFO("Removing node `%s` because its name is blacklisted",
                       prop->data);
-                dtb_remove_node(parent, node);
+                apple_dt_remove_node(parent, node);
                 return;
             }
         }
     }
 
-    prop = dtb_find_prop(node, "device_type");
+    prop = apple_dt_get_prop(node, "device_type");
     if (prop != NULL) {
         g_assert_nonnull(prop->data);
         for (count = sizeof(REM_DEV_TYPES) / sizeof(REM_DEV_TYPES[0]), i = 0;
              i < count; i++) {
-            uint64_t size = MIN(prop->length, sstrlen(REM_DEV_TYPES[i]));
+            uint64_t size = MIN(prop->len, sstrlen(REM_DEV_TYPES[i]));
             if (memcmp(prop->data, REM_DEV_TYPES[i], size) == 0) {
                 g_assert_nonnull(parent);
                 DINFO("Removing node `%s` because its device type "
                       "property `%s` is blacklisted",
-                      dtb_find_prop(node, "name")->data, prop->data);
-                dtb_remove_node(parent, node);
+                      apple_dt_find_prop(node, "name")->data, prop->data);
+                apple_dt_remove_node(parent, node);
                 return;
             }
         }
@@ -300,15 +298,15 @@ static void macho_dtb_node_process(DTBNode *node, DTBNode *parent)
 
     for (count = sizeof(REM_PROPS) / sizeof(REM_PROPS[0]), i = 0; i < count;
          i++) {
-        dtb_remove_prop_named(node, REM_PROPS[i]);
+        apple_dt_remove_prop_named(node, REM_PROPS[i]);
     }
 
     for (iter = node->children; iter != NULL;) {
-        child = (DTBNode *)iter->data;
+        child = (AppleDTNode *)iter->data;
 
-        // iter might be invalidated by macho_dtb_node_process
+        // iter might get invalidated
         iter = iter->next;
-        macho_dtb_node_process(child, node);
+        apple_boot_process_dt_node(child, node);
     }
 }
 
@@ -456,9 +454,9 @@ static void extract_im4p_payload(const char *filename, char *payload_type,
     *length = len;
 }
 
-DTBNode *load_dtb_from_file(const char *filename)
+AppleDTNode *apple_boot_load_dt_file(const char *filename)
 {
-    DTBNode *root = NULL;
+    AppleDTNode *root = NULL;
     uint8_t *file_data = NULL;
     uint32_t fsize;
     char payload_type[4];
@@ -475,173 +473,151 @@ DTBNode *load_dtb_from_file(const char *filename)
                    filename, payload_type);
     }
 
-    root = dtb_deserialise(file_data);
+    root = apple_dt_deserialise(file_data);
     g_free(file_data);
     return root;
 }
 
-void macho_populate_dtb(DTBNode *root, AppleBootInfo *info)
+static void apple_boot_init_mem_ranges(AppleDTNode *root)
 {
-    DTBNode *child;
-    DTBProp *prop;
-    uint64_t memmap[2] = { 0 };
+    AppleDTNode *child;
 
-    child = dtb_get_node(root, "chosen");
+    child = apple_dt_get_node(root, "chosen/memory-map");
     g_assert_nonnull(child);
 
-////#ifndef ENABLE_DATA_ENCRYPTION
-#if 0
-    // will cause sep panic: sks 0x996b6
-    dtb_set_prop_u32(child, "protected-data-access", 0);
-#endif
-    dtb_set_prop_u32(child, "image4-allow-magazine-updates", 1);
-
-    prop = dtb_find_prop(child, "random-seed");
-    g_assert_nonnull(prop);
-    qemu_guest_getrandom_nofail(prop->data, prop->length);
-
-    dtb_set_prop_hwaddr(child, "dram-base", info->dram_base);
-    dtb_set_prop_hwaddr(child, "dram-size", info->dram_size);
-    dtb_set_prop_str(child, "firmware-version", "ChefKiss QEMU Apple Silicon");
-
-    if (info->nvram_size > XNU_MAX_NVRAM_SIZE) {
-        warn_report("NVRAM size is larger than expected. (0x%" PRIx32 " vs %X)",
-                    info->nvram_size, XNU_MAX_NVRAM_SIZE);
-        info->nvram_size = XNU_MAX_NVRAM_SIZE;
-    }
-    dtb_set_prop_u32(child, "nvram-total-size", info->nvram_size);
-    dtb_set_prop_u32(child, "nvram-bank-size", info->nvram_size);
-    dtb_set_prop(child, "nvram-proxy-data", info->nvram_size, info->nvram_data);
-
-    // dtb_set_prop_u32(child, "research-enabled", 1);
-    dtb_set_prop_u32(child, "effective-production-status-ap", 1);
-    dtb_set_prop_u32(child, "effective-security-mode-ap", 1);
-    dtb_set_prop_u32(child, "security-domain", 1);
-    dtb_set_prop_u32(child, "chip-epoch", 1);
-    // dtb_set_prop_u32(child, "debug-enabled", 1);
-
-    child = dtb_get_node(root, "defaults");
-    g_assert_nonnull(child);
-// #ifndef ENABLE_DATA_ENCRYPTION
-#if 0
-    dtb_set_prop_null(child, "no-effaceable-storage");
-#endif
-    // enabling fastsim for iOS 26
-    dtb_set_prop_u32(child, "insecure_hpr", 1);
-
-    child = dtb_get_node(root, "chosen/manifest-properties");
-    dtb_set_prop(child, "BNCH", sizeof(info->boot_nonce_hash),
-                 info->boot_nonce_hash);
-
-    child = dtb_get_node(root, "product");
-    g_assert_nonnull(child);
-    dtb_set_prop_u32(child, "allow-hactivation", 1);
-
-    macho_dtb_node_process(root, NULL);
-
-    child = dtb_get_node(root, "chosen/memory-map");
-    g_assert_nonnull(child);
-
-    dtb_set_prop(child, "RAMDisk", sizeof(memmap), memmap);
-    dtb_set_prop(child, "TrustCache", sizeof(memmap), memmap);
-    dtb_set_prop(child, "SEPFW", sizeof(memmap), memmap);
-    dtb_set_prop(child, "BootArgs", sizeof(memmap), &memmap);
-    dtb_set_prop(child, "DeviceTree", sizeof(memmap), &memmap);
-
-    info->device_tree_size = ROUND_UP_16K(dtb_get_serialised_node_size(root));
+    apple_dt_set_prop(child, "RAMDisk", 16, NULL);
+    apple_dt_set_prop(child, "TrustCache", 16, NULL);
+    apple_dt_set_prop(child, "SEPFW", 16, NULL);
+    apple_dt_set_prop(child, "BootArgs", 16, NULL);
+    apple_dt_set_prop(child, "DeviceTree", 16, NULL);
 }
 
-static void set_memory_range(DTBNode *root, const char *name, uint64_t addr,
+void apple_boot_populate_dt(AppleDTNode *root, AppleBootInfo *info)
+{
+    AppleDTNode *child;
+    AppleDTProp *prop;
+
+    g_assert_cmphex(info->nvram_size, <=, XNU_MAX_NVRAM_SIZE);
+
+    child = apple_dt_get_node(root, "chosen");
+    g_assert_nonnull(child);
+
+    apple_dt_set_prop_u32(child, "image4-allow-magazine-updates", 1);
+
+    prop = apple_dt_get_prop(child, "random-seed");
+    g_assert_nonnull(prop);
+    qemu_guest_getrandom_nofail(prop->data, prop->len);
+
+    apple_dt_set_prop_hwaddr(child, "dram-base", info->dram_base);
+    apple_dt_set_prop_hwaddr(child, "dram-size", info->dram_size);
+    apple_dt_set_prop_str(child, "firmware-version",
+                          "ChefKiss QEMU Apple Silicon");
+
+    apple_dt_set_prop_u32(child, "nvram-total-size", info->nvram_size);
+    apple_dt_set_prop_u32(child, "nvram-bank-size", info->nvram_size);
+    apple_dt_set_prop(child, "nvram-proxy-data", info->nvram_size,
+                      info->nvram_data);
+
+    // apple_dt_set_prop_u32(child, "research-enabled", 1);
+    apple_dt_set_prop_u32(child, "effective-production-status-ap", 1);
+    apple_dt_set_prop_u32(child, "effective-security-mode-ap", 1);
+    apple_dt_set_prop_u32(child, "security-domain", 1);
+    apple_dt_set_prop_u32(child, "chip-epoch", 1);
+    // apple_dt_set_prop_u32(child, "debug-enabled", 1);
+
+    child = apple_dt_get_node(root, "defaults");
+    g_assert_nonnull(child);
+
+    // Enable FastSim for iOS 26
+    apple_dt_set_prop_u32(child, "insecure_hpr", 1);
+
+    child = apple_dt_get_node(root, "chosen/manifest-properties");
+    apple_dt_set_prop(child, "BNCH", sizeof(info->boot_nonce_hash),
+                      info->boot_nonce_hash);
+
+    child = apple_dt_get_node(root, "product");
+    g_assert_nonnull(child);
+    apple_dt_set_prop_u32(child, "allow-hactivation", 1);
+
+    apple_boot_init_mem_ranges(root);
+
+    apple_boot_process_dt_node(root, NULL);
+
+    // Prevent further additions.
+    info->device_tree_size = apple_dt_finalise(root);
+}
+
+static void set_memory_range(AppleDTNode *root, const char *name, uint64_t addr,
                              uint64_t size)
 {
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
 
-    g_assert_cmphex(addr, !=, 0);
-    g_assert_cmpuint(size, !=, 0);
-
-    child = dtb_get_node(root, "chosen/memory-map");
+    child = apple_dt_get_node(root, "chosen/memory-map");
     g_assert_nonnull(child);
-
-    prop = dtb_find_prop(child, name);
+    prop = apple_dt_get_prop(child, name);
     g_assert_nonnull(prop);
 
-    ((uint64_t *)prop->data)[0] = addr;
-    ((uint64_t *)prop->data)[1] = size;
+    stq_le_p(prop->data, addr);
+    stq_le_p(prop->data + sizeof(addr), size);
 }
 
-static void remove_memory_range(DTBNode *root, const char *name)
+void apple_boot_finalise_dt(AppleDTNode *root, AddressSpace *as,
+                            MemoryRegion *mem, AppleBootInfo *info)
 {
-    DTBNode *child;
+    uint8_t *buf;
+    QCryptoHashAlgo alg;
+    uint8_t *hash;
+    size_t hash_len;
+    AppleDTNode *child;
+    const char *crypto_hash_method;
+    AppleDTProp *prop;
+    Error *err;
 
-    child = dtb_get_node(root, "chosen/memory-map");
-    g_assert_nonnull(child);
-
-    dtb_remove_prop_named(child, "DeviceTree");
-}
-
-static void set_or_remove_memory_range(DTBNode *root, const char *name,
-                                       uint64_t addr, uint64_t size)
-{
-    if (addr) {
-        set_memory_range(root, name, addr, size);
-    } else {
-        remove_memory_range(root, name);
-    }
-}
-
-void macho_load_dtb(DTBNode *root, AddressSpace *as, MemoryRegion *mem,
-                    AppleBootInfo *info)
-{
-    g_autofree uint8_t *buf = NULL;
-
-    set_memory_range(root, "DeviceTree", info->device_tree_addr,
-                     info->device_tree_size);
-    set_or_remove_memory_range(root, "RAMDisk", info->ramdisk_addr,
-                               info->ramdisk_size);
-    set_or_remove_memory_range(root, "TrustCache", info->trustcache_addr,
-                               info->trustcache_size);
-    set_or_remove_memory_range(root, "SEPFW", info->sep_fw_addr,
-                               info->sep_fw_size);
+    set_memory_range(root, "RAMDisk", info->ramdisk_addr, info->ramdisk_size);
+    set_memory_range(root, "TrustCache", info->trustcache_addr,
+                     info->trustcache_size);
+    set_memory_range(root, "SEPFW", info->sep_fw_addr, info->sep_fw_size);
     set_memory_range(root, "BootArgs", info->kern_boot_args_addr,
                      info->kern_boot_args_size);
 
-    if (info->ticket_data && info->ticket_length) {
-        QCryptoHashAlgo alg = QCRYPTO_HASH_ALGO_SHA1;
-        g_autofree uint8_t *hash = NULL;
-        size_t hash_len = 0;
-        DTBNode *child = dtb_get_node(root, "chosen");
-        DTBProp *prop = NULL;
-        g_autofree Error *err = NULL;
-        prop = dtb_find_prop(child, "crypto-hash-method");
+    if (info->ticket_data != NULL && info->ticket_length != 0) {
+        child = apple_dt_get_node(root, "chosen");
 
-        if (prop != NULL) {
-            if (strcmp((char *)prop->data, "sha2-384") == 0) {
-                alg = QCRYPTO_HASH_ALGO_SHA384;
-            }
+        crypto_hash_method = apple_dt_get_prop_str_or(
+            child, "crypto-hash-method", "sha1", &error_fatal);
+        if (strcmp(crypto_hash_method, "sha2-384") == 0) {
+            alg = QCRYPTO_HASH_ALGO_SHA384;
+        } else if (strcmp(crypto_hash_method, "sha1") == 0) {
+            alg = QCRYPTO_HASH_ALGO_SHA1;
+        } else {
+            g_assert_not_reached();
         }
 
-        prop = dtb_find_prop(child, "boot-manifest-hash");
+        prop = apple_dt_get_prop(child, "boot-manifest-hash");
         g_assert_nonnull(prop);
 
         if (qcrypto_hash_bytes(alg, info->ticket_data, info->ticket_length,
                                &hash, &hash_len, &err) >= 0) {
-            g_assert_cmpuint(hash_len, ==, prop->length);
+            g_assert_cmpuint(hash_len, ==, prop->len);
             memcpy(prop->data, hash, hash_len);
+            g_free(hash);
         } else {
             error_report_err(err);
         }
     }
 
-    g_assert_cmpuint(info->device_tree_size, >=,
-                     dtb_get_serialised_node_size(root));
-    buf = g_malloc0(info->device_tree_size);
-    dtb_serialise(buf, root);
+    set_memory_range(root, "DeviceTree", info->device_tree_addr,
+                     info->device_tree_size);
+
+    buf = g_malloc(info->device_tree_size);
+    apple_dt_serialise(root, buf);
+
     address_space_rw(as, info->device_tree_addr, MEMTXATTRS_UNSPECIFIED, buf,
                      info->device_tree_size, true);
 }
 
-uint8_t *load_trustcache_from_file(const char *filename, uint64_t *size)
+uint8_t *apple_boot_load_trustcache_file(const char *filename, uint64_t *size)
 {
     uint32_t *trustcache_data;
     uint64_t trustcache_size;
@@ -730,8 +706,8 @@ void macho_load_ramdisk(const char *filename, AddressSpace *as,
     g_free(file_data);
 }
 
-void macho_load_raw_file(const char *filename, AddressSpace *as,
-                         MemoryRegion *mem, hwaddr file_pa, uint64_t *size)
+void apple_boot_load_raw_file(const char *filename, AddressSpace *as,
+                              MemoryRegion *mem, hwaddr file_pa, uint64_t *size)
 {
     uint8_t *file_data;
     gsize sizef;
@@ -746,8 +722,8 @@ void macho_load_raw_file(const char *filename, AddressSpace *as,
     }
 }
 
-bool xnu_contains_boot_arg(const char *bootArgs, const char *arg,
-                           bool prefixmatch)
+bool apple_boot_contains_boot_arg(const char *bootArgs, const char *arg,
+                                  bool prefixmatch)
 {
     g_autofree char *args = g_strdup(bootArgs);
     char *pos = args;
@@ -769,7 +745,7 @@ bool xnu_contains_boot_arg(const char *bootArgs, const char *arg,
     return false;
 }
 
-void apple_monitor_setup_boot_args(
+void apple_boot_setup_monitor_boot_args(
     AddressSpace *as, MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
     hwaddr phys_base, hwaddr mem_size, hwaddr kern_args, hwaddr kern_entry,
     hwaddr kern_phys_base, hwaddr kern_phys_slide, hwaddr kern_virt_slide,
@@ -859,12 +835,12 @@ macho_setup_bootargs_rev3(AddressSpace *as, MemoryRegion *mem, hwaddr addr,
                      sizeof(boot_args), true);
 }
 
-void macho_setup_bootargs(uint32_t build_version, AddressSpace *as,
-                          MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
-                          hwaddr phys_base, hwaddr mem_size, hwaddr kernel_top,
-                          hwaddr dtb_va, hwaddr dtb_size,
-                          AppleVideoArgs *video_args, const char *cmdline,
-                          hwaddr mem_size_actual)
+void apple_boot_setup_bootargs(uint32_t build_version, AddressSpace *as,
+                               MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
+                               hwaddr phys_base, hwaddr mem_size,
+                               hwaddr kernel_top, hwaddr dtb_va,
+                               hwaddr dtb_size, AppleVideoArgs *video_args,
+                               const char *cmdline, hwaddr mem_size_actual)
 {
     switch (BUILD_VERSION_MAJOR(build_version)) {
     case 13:
@@ -891,8 +867,8 @@ void macho_setup_bootargs(uint32_t build_version, AddressSpace *as,
     }
 }
 
-void macho_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,
-                          uint64_t *highaddr)
+void apple_boot_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,
+                               uint64_t *highaddr)
 {
     MachoLoadCommand *cmd =
         (MachoLoadCommand *)((uint8_t *)mh + sizeof(MachoHeader64));
@@ -930,7 +906,7 @@ void macho_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,
     }
 }
 
-void macho_text_base(MachoHeader64 *mh, uint64_t *base)
+void apple_boot_text_base(MachoHeader64 *mh, uint64_t *base)
 {
     MachoLoadCommand *cmd = (MachoLoadCommand *)(mh + 1);
     unsigned int index;
@@ -953,8 +929,8 @@ void macho_text_base(MachoHeader64 *mh, uint64_t *base)
     }
 }
 
-MachoHeader64 *macho_load_file(const char *filename,
-                               MachoHeader64 **secure_monitor)
+MachoHeader64 *apple_boot_load_macho_file(const char *filename,
+                                          MachoHeader64 **secure_monitor)
 {
     uint32_t len;
     uint8_t *data = NULL;
@@ -970,12 +946,12 @@ MachoHeader64 *macho_load_file(const char *filename,
                    filename, payload_type);
     }
 
-    mh = macho_parse(data, len);
+    mh = apple_boot_parse_macho(data, len);
     g_free(data);
     return mh;
 }
 
-MachoHeader64 *macho_parse(uint8_t *data, uint32_t len)
+MachoHeader64 *apple_boot_parse_macho(uint8_t *data, uint32_t len)
 {
     uint8_t *phys_base = NULL;
     MachoHeader64 *mh;
@@ -988,7 +964,7 @@ MachoHeader64 *macho_parse(uint8_t *data, uint32_t len)
     mh = (MachoHeader64 *)data;
     g_assert_cmphex(mh->magic, ==, MACH_MAGIC_64);
 
-    macho_highest_lowest(mh, &lowaddr, &highaddr);
+    apple_boot_highest_lowest(mh, &lowaddr, &highaddr);
     g_assert_cmphex(lowaddr, <, highaddr);
 
     phys_base = g_malloc0(highaddr - lowaddr);
@@ -1023,13 +999,13 @@ MachoHeader64 *macho_parse(uint8_t *data, uint32_t len)
     return (MachoHeader64 *)(phys_base + text_base - virt_base);
 }
 
-uint32_t macho_build_version(MachoHeader64 *mh)
+uint32_t apple_boot_build_version(MachoHeader64 *mh)
 {
     MachoLoadCommand *cmd;
     int index;
 
     if (mh->file_type == MH_FILESET) {
-        mh = macho_get_fileset_header(mh, "com.apple.kernel");
+        mh = apple_boot_get_fileset_header(mh, "com.apple.kernel");
     }
     cmd = (MachoLoadCommand *)((char *)mh + sizeof(MachoHeader64));
 
@@ -1048,13 +1024,13 @@ uint32_t macho_build_version(MachoHeader64 *mh)
     return 0;
 }
 
-uint32_t macho_platform(MachoHeader64 *mh)
+uint32_t apple_boot_platform(MachoHeader64 *mh)
 {
     MachoLoadCommand *cmd;
     int index;
 
     if (mh->file_type == MH_FILESET) {
-        mh = macho_get_fileset_header(mh, "com.apple.kernel");
+        mh = apple_boot_get_fileset_header(mh, "com.apple.kernel");
     }
 
     cmd = (MachoLoadCommand *)((char *)mh + sizeof(MachoHeader64));
@@ -1076,9 +1052,9 @@ uint32_t macho_platform(MachoHeader64 *mh)
     return 0;
 }
 
-const char *macho_platform_string(MachoHeader64 *mh)
+const char *apple_boot_platform_string(MachoHeader64 *mh)
 {
-    uint32_t platform = macho_platform(mh);
+    uint32_t platform = apple_boot_platform(mh);
     switch (platform) {
     case PLATFORM_MACOS:
         return "macOS";
@@ -1172,10 +1148,10 @@ static void macho_process_symbols(MachoHeader64 *mh, uint64_t slide)
         return;
     }
 
-    macho_highest_lowest(mh, &kernel_low, &kernel_high);
+    apple_boot_highest_lowest(mh, &kernel_low, &kernel_high);
 
-    data = macho_get_buffer(mh);
-    linkedit_seg = macho_get_segment(mh, "__LINKEDIT");
+    data = apple_boot_get_macho_buffer(mh);
+    linkedit_seg = apple_boot_get_segment(mh, "__LINKEDIT");
 
     cmd = (MachoLoadCommand *)(mh + 1);
     for (index = 0; index < mh->n_cmds; index++) {
@@ -1210,7 +1186,7 @@ static void macho_process_symbols(MachoHeader64 *mh, uint64_t slide)
 
             base = data + (linkedit_seg->vmaddr - kernel_low);
             off = linkedit_seg->fileoff;
-            macho_text_base(mh, &text_base);
+            apple_boot_text_base(mh, &text_base);
             for (size_t i = 0; i < dysymtab->loc_rel_n; i++) {
                 int32_t r_address =
                     *(int32_t *)(base + (dysymtab->loc_rel_off - off) + i * 8);
@@ -1226,7 +1202,8 @@ static void macho_process_symbols(MachoHeader64 *mh, uint64_t slide)
     }
 }
 
-void macho_allocate_segment_records(DTBNode *memory_map, MachoHeader64 *mh)
+void apple_boot_allocate_segment_records(AppleDTNode *memory_map,
+                                         MachoHeader64 *mh)
 {
     unsigned int index;
     MachoLoadCommand *cmd;
@@ -1244,8 +1221,8 @@ void macho_allocate_segment_records(DTBNode *memory_map, MachoHeader64 *mh)
                 uint64_t paddr;
                 uint64_t length;
             } file_info = { 0 };
-            dtb_set_prop(memory_map, region_name, sizeof(file_info),
-                         &file_info);
+            apple_dt_set_prop(memory_map, region_name, sizeof(file_info),
+                              &file_info);
             break;
         }
         default:
@@ -1256,17 +1233,17 @@ void macho_allocate_segment_records(DTBNode *memory_map, MachoHeader64 *mh)
     }
 }
 
-hwaddr arm_load_macho(MachoHeader64 *mh, AddressSpace *as, MemoryRegion *mem,
-                      DTBNode *memory_map, hwaddr phys_base,
-                      uint64_t virt_slide)
+hwaddr apple_boot_load_macho(MachoHeader64 *mh, AddressSpace *as,
+                             MemoryRegion *mem, AppleDTNode *memory_map,
+                             hwaddr phys_base, uint64_t virt_slide)
 {
     uint8_t *data = NULL;
     unsigned int index;
     MachoLoadCommand *cmd;
     hwaddr pc = 0;
-    data = macho_get_buffer(mh);
+    data = apple_boot_get_macho_buffer(mh);
     uint64_t virt_low, virt_high;
-    macho_highest_lowest(mh, &virt_low, &virt_high);
+    apple_boot_highest_lowest(mh, &virt_low, &virt_high);
     bool is_fileset = mh->file_type == MH_FILESET;
     MachoHeader64 *mh2 = NULL;
     void *load_from2 = NULL;
@@ -1292,8 +1269,8 @@ hwaddr arm_load_macho(MachoHeader64 *mh, AddressSpace *as, MemoryRegion *mem,
                     uint64_t paddr;
                     uint64_t length;
                 } file_info = { load_to, segCmd->vmsize };
-                dtb_set_prop(memory_map, region_name, sizeof(file_info),
-                             &file_info);
+                apple_dt_set_prop(memory_map, region_name, sizeof(file_info),
+                                  &file_info);
             } else {
                 snprintf(region_name, sizeof(region_name), "TZ1-%s",
                          segCmd->segname);
@@ -1409,23 +1386,18 @@ hwaddr arm_load_macho(MachoHeader64 *mh, AddressSpace *as, MemoryRegion *mem,
     return pc;
 }
 
-uint8_t *macho_get_buffer(MachoHeader64 *hdr)
+uint8_t *apple_boot_get_macho_buffer(MachoHeader64 *hdr)
 {
     uint64_t lowaddr = 0, highaddr = 0, text_base = 0;
 
-    macho_highest_lowest(hdr, &lowaddr, &highaddr);
-    macho_text_base(hdr, &text_base);
+    apple_boot_highest_lowest(hdr, &lowaddr, &highaddr);
+    apple_boot_text_base(hdr, &text_base);
 
     return (uint8_t *)((uint8_t *)hdr - text_base + lowaddr);
 }
 
-void macho_free(MachoHeader64 *hdr)
-{
-    g_free(macho_get_buffer(hdr));
-}
-
-MachoFilesetEntryCommand *macho_get_fileset(MachoHeader64 *header,
-                                            const char *entry)
+MachoFilesetEntryCommand *apple_boot_get_fileset(MachoHeader64 *header,
+                                                 const char *entry)
 {
     if (header->file_type != MH_FILESET) {
         return NULL;
@@ -1448,10 +1420,10 @@ MachoFilesetEntryCommand *macho_get_fileset(MachoHeader64 *header,
     return NULL;
 }
 
-MachoHeader64 *macho_get_fileset_header(MachoHeader64 *header,
-                                        const char *entry)
+MachoHeader64 *apple_boot_get_fileset_header(MachoHeader64 *header,
+                                             const char *entry)
 {
-    MachoFilesetEntryCommand *fileset = macho_get_fileset(header, entry);
+    MachoFilesetEntryCommand *fileset = apple_boot_get_fileset(header, entry);
     MachoHeader64 *sub_header;
     if (fileset == NULL) {
         return NULL;
@@ -1460,14 +1432,14 @@ MachoHeader64 *macho_get_fileset_header(MachoHeader64 *header,
     return sub_header;
 }
 
-MachoSegmentCommand64 *macho_get_segment(MachoHeader64 *header,
-                                         const char *segname)
+MachoSegmentCommand64 *apple_boot_get_segment(MachoHeader64 *header,
+                                              const char *segname)
 {
     uint32_t i;
 
     if (header->file_type == MH_FILESET) {
-        return macho_get_segment(
-            macho_get_fileset_header(header, "com.apple.kernel"), segname);
+        return apple_boot_get_segment(
+            apple_boot_get_fileset_header(header, "com.apple.kernel"), segname);
     } else {
         MachoSegmentCommand64 *sgp;
 
@@ -1485,8 +1457,8 @@ MachoSegmentCommand64 *macho_get_segment(MachoHeader64 *header,
     return NULL;
 }
 
-MachoSection64 *macho_get_section(MachoSegmentCommand64 *seg,
-                                  const char *sect_name)
+MachoSection64 *apple_boot_get_section(MachoSegmentCommand64 *seg,
+                                       const char *sect_name)
 {
     MachoSection64 *sp;
     uint32_t i;
@@ -1500,12 +1472,12 @@ MachoSection64 *macho_get_section(MachoSegmentCommand64 *seg,
     return NULL;
 }
 
-hwaddr xnu_fixup_slide_va(hwaddr va)
+hwaddr apple_boot_fixup_slide_va(hwaddr va)
 {
     return (0xFFFF000000000000 | va) + g_virt_slide;
 }
 
-void *xnu_va_to_ptr(hwaddr va)
+void *apple_boot_va_to_ptr(hwaddr va)
 {
-    return (void *)(xnu_fixup_slide_va(va) - g_virt_base + g_phys_base);
+    return (void *)(apple_boot_fixup_slide_va(va) - g_virt_base + g_phys_base);
 }

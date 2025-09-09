@@ -20,9 +20,9 @@
 #ifndef HW_MISC_APPLE_SILICON_BUTTONS_H
 #define HW_MISC_APPLE_SILICON_BUTTONS_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 
-SysBusDevice *apple_buttons_create(DTBNode *node);
+SysBusDevice *apple_buttons_create(AppleDTNode *node);
 
 #endif /* HW_MISC_APPLE_SILICON_BUTTONS_H */

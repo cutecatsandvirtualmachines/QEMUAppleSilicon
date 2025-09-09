@@ -2,7 +2,7 @@
 #define HW_MISC_APPLE_SILICON_SMC_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/misc/apple-silicon/a7iop/base.h"
 #include "hw/sysbus.h"
 
@@ -164,7 +164,7 @@ struct SMCKeyData {
     QTAILQ_ENTRY(SMCKeyData) next;
 };
 
-SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
+SysBusDevice *apple_smc_create(AppleDTNode *node, AppleA7IOPVersion version,
                                uint32_t protocol_version, uint64_t sram_size);
 
 SMCKey *apple_smc_get_key(AppleSMCState *s, uint32_t key);

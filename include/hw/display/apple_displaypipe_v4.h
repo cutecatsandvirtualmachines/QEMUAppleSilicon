@@ -21,15 +21,15 @@
 
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/boot.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 #include "qom/object.h"
 
 #define TYPE_APPLE_DISPLAY_PIPE_V4 "apple-display-pipe-v4"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleDisplayPipeV4State, APPLE_DISPLAY_PIPE_V4);
 
-SysBusDevice *adp_v4_create(DTBNode *node, MemoryRegion *dma_mr,
-                            AppleVideoArgs *video_args);
+SysBusDevice *adp_v4_from_node(AppleDTNode *node, MemoryRegion *dma_mr,
+                               AppleVideoArgs *video_args);
 
 void adp_v4_update_vram_mapping(AppleDisplayPipeV4State *s, MemoryRegion *mr,
                                 hwaddr off, uint64_t size);

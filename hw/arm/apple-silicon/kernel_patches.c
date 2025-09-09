@@ -37,7 +37,7 @@ static CKPatcherRange *ck_kp_range_from_va(const char *name, hwaddr base,
     CKPatcherRange *range = g_new0(CKPatcherRange, 1);
     range->addr = base;
     range->length = size;
-    range->ptr = xnu_va_to_ptr(base);
+    range->ptr = apple_boot_va_to_ptr(base);
     range->name = name;
     return range;
 }
@@ -49,12 +49,12 @@ static CKPatcherRange *ck_kp_find_section_range(MachoHeader64 *hdr,
     MachoSection64 *sec;
     MachoSegmentCommand64 *seg;
 
-    seg = macho_get_segment(hdr, segment);
+    seg = apple_boot_get_segment(hdr, segment);
     if (seg == NULL) {
         return NULL;
     }
 
-    sec = macho_get_section(seg, section);
+    sec = apple_boot_get_section(seg, section);
     return sec == NULL ? NULL :
                          ck_kp_range_from_va(segment, sec->addr, sec->size);
 }
@@ -70,7 +70,7 @@ static MachoHeader64 *ck_kp_find_image_header(MachoHeader64 *hdr,
     const char *prelinkinfo, *last_dict;
 
     if (hdr->file_type == MH_FILESET) {
-        return macho_get_fileset_header(hdr, bundle_id);
+        return apple_boot_get_fileset_header(hdr, bundle_id);
     }
 
     g_autofree CKPatcherRange *kmod_info_range =
@@ -124,7 +124,7 @@ static MachoHeader64 *ck_kp_find_image_header(MachoHeader64 *hdr,
                                 if (avalue != NULL) {
                                     avalue = strstr(avalue, ">");
                                     if (avalue != NULL) {
-                                        return xnu_va_to_ptr(
+                                        return apple_boot_va_to_ptr(
                                             strtoull(++avalue, 0, 0));
                                     }
                                 }
@@ -146,9 +146,10 @@ static MachoHeader64 *ck_kp_find_image_header(MachoHeader64 *hdr,
         start = (uint64_t *)kmod_start_range->ptr;
         count = kmod_info_range->length / 8;
         for (i = 0; i < count; i++) {
-            const char *kext_name = (const char *)xnu_va_to_ptr(info[i]) + 0x10;
+            const char *kext_name =
+                (const char *)apple_boot_va_to_ptr(info[i]) + 0x10;
             if (strcmp(kext_name, bundle_id) == 0) {
-                return xnu_va_to_ptr(start[i]);
+                return apple_boot_va_to_ptr(start[i]);
             }
         }
     }

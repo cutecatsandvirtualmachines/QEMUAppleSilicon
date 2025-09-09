@@ -1,8 +1,32 @@
+/*
+ * Apple System Management and Power Interface.
+ *
+ * Copyright (c) 2024-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
 #include "hw/irq.h"
 #include "hw/spmi/apple_spmi.h"
 #include "migration/vmstate.h"
+#include "qapi/error.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
@@ -550,40 +574,32 @@ static void apple_spmi_init(Object *obj)
     qdev_init_gpio_out_named(dev, &s->resp_irq, APPLE_SPMI_RESP_IRQ, 1);
 }
 
-SysBusDevice *apple_spmi_create(DTBNode *node)
+SysBusDevice *apple_spmi_from_node(AppleDTNode *node)
 {
     DeviceState *dev;
     AppleSPMIState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
     uint32_t phandle;
 
     dev = qdev_new(TYPE_APPLE_SPMI);
     s = APPLE_SPMI(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    prop = dtb_find_prop(node, "name");
-    dev->id = g_strdup((const char *)prop->data);
+    dev->id = apple_dt_get_prop_strdup(node, "name", &error_fatal);
 
-    prop = dtb_find_prop(node, "reg-vers");
-    if (prop) {
-        s->reg_vers = *(uint32_t *)prop->data;
-    }
+    s->reg_vers = apple_dt_get_prop_u32_or(node, "reg-vers", 0, &error_fatal);
 
-    /* XXX: There is a register overlapping issue (STS and ENAB) with reg v0 */
+    // XXX: There is a register overlapping issue (STS and ENAB) with reg v0
     g_assert_cmpuint(s->reg_vers, !=, 0);
 
-    prop = dtb_find_prop(node, "AAPL,phandle");
+    phandle = apple_dt_get_prop_u32(node, "AAPL,phandle", &error_fatal);
 
-    phandle = *(uint32_t *)prop->data;
+    s->resp_intr_index = apple_dt_get_prop_u32(node, "interrupts", &error_warn);
 
-    prop = dtb_find_prop(node, "interrupts");
-
-    s->resp_intr_index = *(uint32_t *)prop->data;
-
-    prop = dtb_find_prop(node, "interrupt-parent");
-    /* The first interrupt in list (response) should be self-wired */
-    g_assert_cmpuint(*(uint32_t *)prop->data, ==, phandle);
+    // The first interrupt in list (response) should be self-wired
+    g_assert_cmpuint(
+        apple_dt_get_prop_u32(node, "interrupt-parent", &error_warn), ==,
+        phandle);
 
     return sbd;
 }

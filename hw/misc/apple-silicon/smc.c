@@ -1,5 +1,5 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/misc/apple-silicon/smc.h"
 #include "hw/qdev-core.h"
@@ -377,15 +377,15 @@ static const AppleRTKitOps apple_smc_rtkit_ops = {
     .boot_done = apple_smc_boot_done,
 };
 
-SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
+SysBusDevice *apple_smc_create(AppleDTNode *node, AppleA7IOPVersion version,
                                uint32_t protocol_version, uint64_t sram_size)
 {
     DeviceState *dev;
     AppleSMCState *s;
     AppleRTKit *rtk;
     SysBusDevice *sbd;
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
     uint64_t *reg;
     uint8_t data[8] = { 0x00, 0x00, 0x70, 0x80, 0x00, 0x01, 0x19, 0x40 };
     uint8_t ac_adapter_count = 1;
@@ -414,10 +414,10 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
     rtk = APPLE_RTKIT(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    child = dtb_get_node(node, "iop-smc-nub");
+    child = apple_dt_get_node(node, "iop-smc-nub");
     g_assert_nonnull(child);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;
@@ -441,8 +441,8 @@ SysBusDevice *apple_smc_create(DTBNode *node, AppleA7IOPVersion version,
                                       s->sram_size, s->sram);
     sysbus_init_mmio(sbd, s->iomems[APPLE_SMC_MMIO_SRAM]);
 
-    dtb_set_prop_u32(child, "pre-loaded", 1);
-    dtb_set_prop_u32(child, "running", 1);
+    apple_dt_set_prop_u32(child, "pre-loaded", 1);
+    apple_dt_set_prop_u32(child, "running", 1);
 
     QTAILQ_INIT(&s->keys);
     QTAILQ_INIT(&s->key_data);

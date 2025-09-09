@@ -20,11 +20,11 @@
 #ifndef HW_BLOCK_APPLE_NVME_MMU_H
 #define HW_BLOCK_APPLE_NVME_MMU_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/nvme/nvme.h"
-#include "hw/pci/pci_bus.h"
 #include "hw/pci/pci_bridge.h"
-//#include "hw/pci/pci_device.h"
+#include "hw/pci/pci_bus.h"
+// #include "hw/pci/pci_device.h"
 #include "hw/pci/pcie_host.h"
 #include "hw/sysbus.h"
 
@@ -63,6 +63,6 @@ struct AppleNVMeMMUState {
     uint32_t common_reg[0x4000 / sizeof(uint32_t)];
 };
 
-SysBusDevice *apple_nvme_mmu_create(DTBNode *node, PCIBus *pci_bus);
+SysBusDevice *apple_nvme_mmu_from_node(AppleDTNode *node, PCIBus *pci_bus);
 
 #endif /* HW_BLOCK_APPLE_NVME_MMU_H */

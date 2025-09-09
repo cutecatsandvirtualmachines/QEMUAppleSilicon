@@ -1,12 +1,37 @@
+/*
+ * Apple Device Address Resolution Table.
+ *
+ * Copyright (c) 2024-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dart.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/irq.h"
 #include "hw/qdev-core.h"
 #include "hw/sysbus.h"
 #include "migration/vmstate.h"
 #include "monitor/hmp-target.h"
 #include "monitor/monitor.h"
+#include "qapi/error.h"
 #include "qemu/bitops.h"
 #include "qemu/module.h"
 #include "qobject/qdict.h"
@@ -152,7 +177,6 @@ struct AppleDARTInstance {
 
 struct AppleDARTState {
     SysBusDevice parent_obj;
-    char name[0x20];
     qemu_irq irq;
     AppleDARTInstance instances[DART_MAX_INSTANCE];
     uint32_t num_instances;
@@ -589,12 +613,12 @@ IOMMUMemoryRegion *apple_dart_instance_iommu_mr(AppleDARTState *s,
     return NULL;
 }
 
-AppleDARTState *apple_dart_create(DTBNode *node)
+AppleDARTState *apple_dart_from_node(AppleDTNode *node)
 {
     DeviceState *dev;
     AppleDARTState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
     uint32_t *instance;
     int i;
@@ -603,76 +627,53 @@ AppleDARTState *apple_dart_create(DTBNode *node)
     s = APPLE_DART(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    prop = dtb_find_prop(node, "name");
-    g_strlcpy(s->name, (char *)prop->data, sizeof(s->name));
-    dev->id = g_strdup((char *)prop->data);
+    dev->id = apple_dt_get_prop_strdup(node, "name", &error_fatal);
 
-    prop = dtb_find_prop(node, "page-size");
-    if (!prop || prop->length < 4) {
-        s->page_shift = 12;
-    } else {
-        s->page_shift = 31 - clz32(*(uint32_t *)prop->data);
-    }
-    s->page_size = 1 << s->page_shift;
+    s->page_size =
+        apple_dt_get_prop_u32_or(node, "page-size", 0x1000, &error_fatal);
+    s->page_shift = 31 - clz32(s->page_size);
     s->page_bits = s->page_size - 1;
     s->page_mask = ~s->page_bits;
 
     switch (s->page_shift) {
     case 12:
-        memcpy(s->l_mask, (uint32_t[3]){ 0xc0000, 0x3fe00, 0x1ff }, 12);
+        memcpy(s->l_mask, (uint32_t[3]){ 0xC0000, 0x3FE00, 0x1FF }, 12);
         memcpy(s->l_shift, (uint32_t[3]){ 0x12, 9, 0 }, 12);
         break;
     case 14:
-        memcpy(s->l_mask, (uint32_t[3]){ 0xc00000, 0x3ff800, 0x7ff }, 12);
+        memcpy(s->l_mask, (uint32_t[3]){ 0xC00000, 0x3FF800, 0x7FF }, 12);
         memcpy(s->l_shift, (uint32_t[3]){ 0x16, 11, 0 }, 12);
         break;
     default:
         g_assert_not_reached();
     }
 
-    prop = dtb_find_prop(node, "sids");
-    if (prop != NULL && prop->length >= 4) {
-        s->sids = ldl_le_p(prop->data);
-    } else {
-        s->sids = 0xFFFF;
-    }
+    s->sids = apple_dt_get_prop_u32_or(node, "sids", 0xFFFF, &error_fatal);
+    s->bypass = apple_dt_get_prop_u32_or(node, "bypass", 0, &error_fatal);
+    s->bypass_address =
+        apple_dt_get_prop_u64_or(node, "bypass-address", 0, &error_warn);
+    s->dart_options =
+        apple_dt_get_prop_u32_or(node, "dart-options", 0, &error_fatal);
 
-    prop = dtb_find_prop(node, "bypass");
-    if (prop != NULL && prop->length >= 4) {
-        s->bypass = ldl_le_p(prop->data);
-    }
-
-    prop = dtb_find_prop(node, "bypass-address");
-    if (prop != NULL && prop->length >= 8) {
-        s->bypass_address = ldq_le_p(prop->data);
-    }
-
-    prop = dtb_find_prop(node, "dart-options");
-    if (prop != NULL && prop->length >= 4) {
-        s->dart_options = ldl_le_p(prop->data);
-    } else {
-        s->dart_options = 0x0;
-    }
-
-    prop = dtb_find_prop(node, "instance");
+    prop = apple_dt_get_prop(node, "instance");
     if (prop == NULL) {
-        prop = dtb_find_prop(node, "smmu-present");
-        if (prop == NULL || ldl_le_p(prop->data) != 1) {
+        if (apple_dt_get_prop_u32_or(node, "smmu-present", 0, &error_fatal) !=
+            1) {
             instance = (uint32_t *)"TRADDART\0\0\0";
         } else {
             instance = (uint32_t *)"TRADDART\0\0\0\0UMMSSMMU\0\0\0";
         }
     } else {
-        g_assert_cmpuint(prop->length % 12, ==, 0);
+        g_assert_cmpuint(prop->len % 12, ==, 0);
         instance = (uint32_t *)prop->data;
     }
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;
 
-    for (i = 0; i < prop->length / 16; i++) {
+    for (i = 0; i < prop->len / 16; i++) {
         AppleDARTInstance *o = &s->instances[i];
         s->num_instances++;
         o->id = i;
@@ -689,7 +690,7 @@ AppleDARTState *apple_dart_create(DTBNode *node)
             for (int j = 0; j < DART_MAX_STREAMS; j++) {
                 if ((1 << j) & s->sids) {
                     g_autofree char *name =
-                        g_strdup_printf("%s-%d-%d", s->name, o->id, j);
+                        g_strdup_printf("%s-%d-%d", DEVICE(s)->id, o->id, j);
                     o->iommus[j] = g_new0(AppleDARTIOMMUMemoryRegion, 1);
                     o->iommus[j]->sid = j;
                     o->iommus[j]->o = o;

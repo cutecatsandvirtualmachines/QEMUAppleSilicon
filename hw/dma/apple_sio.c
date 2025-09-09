@@ -1,3 +1,27 @@
+/*
+ * Apple Smart Input/Output DMA Controller.
+ *
+ * Copyright (c) 2024-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "qemu/osdep.h"
 #include "hw/dma/apple_sio.h"
 #include "hw/misc/apple-silicon/a7iop/rtkit.h"
@@ -464,19 +488,19 @@ AppleSIODMAEndpoint *apple_sio_get_endpoint(AppleSIOState *s, int ep)
     return &s->eps[ep];
 }
 
-AppleSIODMAEndpoint *apple_sio_get_endpoint_from_node(AppleSIOState *s,
-                                                      DTBNode *node, int idx)
+AppleSIODMAEndpoint *
+apple_sio_get_endpoint_from_node(AppleSIOState *s, AppleDTNode *node, int idx)
 {
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint32_t *data;
     int count;
 
-    prop = dtb_find_prop(node, "dma-channels");
+    prop = apple_dt_get_prop(node, "dma-channels");
     if (prop == NULL) {
         return NULL;
     }
 
-    count = prop->length / 32;
+    count = prop->len / 32;
     if (idx >= count) {
         return NULL;
     }
@@ -706,16 +730,16 @@ static void apple_sio_register_types(void)
 
 type_init(apple_sio_register_types);
 
-SysBusDevice *apple_sio_create(DTBNode *node, AppleA7IOPVersion version,
-                               uint32_t rtkit_protocol_version,
-                               uint32_t protocol)
+SysBusDevice *apple_sio_from_node(AppleDTNode *node, AppleA7IOPVersion version,
+                                  uint32_t rtkit_protocol_version,
+                                  uint32_t protocol)
 {
     DeviceState *dev;
     AppleSIOState *s;
     SysBusDevice *sbd;
     AppleRTKit *rtk;
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
     uint64_t *reg;
 
     dev = qdev_new(TYPE_APPLE_SIO);
@@ -726,10 +750,10 @@ SysBusDevice *apple_sio_create(DTBNode *node, AppleA7IOPVersion version,
 
     s->params[PARAM_PROTOCOL] = protocol;
 
-    child = dtb_get_node(node, "iop-sio-nub");
+    child = apple_dt_get_node(node, "iop-sio-nub");
     g_assert_nonnull(child);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;
@@ -742,7 +766,7 @@ SysBusDevice *apple_sio_create(DTBNode *node, AppleA7IOPVersion version,
                           TYPE_APPLE_SIO ".ascv2-core-reg", reg[3]);
     sysbus_init_mmio(sbd, &s->ascv2_iomem);
 
-    dtb_set_prop_u32(child, "pre-loaded", 1);
+    apple_dt_set_prop_u32(child, "pre-loaded", 1);
 
     return sbd;
 }

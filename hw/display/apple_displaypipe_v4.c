@@ -826,13 +826,13 @@ static void adp_v4_update_disp_image_bh(void *opaque)
 static uint32_t adp_timing_info[] = { 0x33C, 0x90, 0x1, 0x1,
                                       0x700, 0x1,  0x1, 0x1 };
 
-SysBusDevice *adp_v4_create(DTBNode *node, MemoryRegion *dma_mr,
-                            AppleVideoArgs *video_args)
+SysBusDevice *adp_v4_from_node(AppleDTNode *node, MemoryRegion *dma_mr,
+                               AppleVideoArgs *video_args)
 {
     DeviceState *dev;
     SysBusDevice *sbd;
     AppleDisplayPipeV4State *s;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
     int i;
 
@@ -854,12 +854,12 @@ SysBusDevice *adp_v4_create(DTBNode *node, MemoryRegion *dma_mr,
     s->update_disp_image_bh = qemu_bh_new_guarded(
         adp_v4_update_disp_image_bh, s, &DEVICE(s)->mem_reentrancy_guard);
 
-    dtb_set_prop_str(node, "display-target", "DisplayTarget5");
-    dtb_set_prop(node, "display-timing-info", sizeof(adp_timing_info),
-                 adp_timing_info);
-    dtb_set_prop_u32(node, "bics-param-set", 0xD);
-    dtb_set_prop_u32(node, "dot-pitch", 326);
-    dtb_set_prop_null(node, "function-brightness_update");
+    apple_dt_set_prop_str(node, "display-target", "DisplayTarget5");
+    apple_dt_set_prop(node, "display-timing-info", sizeof(adp_timing_info),
+                      adp_timing_info);
+    apple_dt_set_prop_u32(node, "bics-param-set", 0xD);
+    apple_dt_set_prop_u32(node, "dot-pitch", 326);
+    apple_dt_set_prop_null(node, "function-brightness_update");
 
     s->dma_mr = dma_mr;
     g_assert_nonnull(s->dma_mr);
@@ -867,7 +867,7 @@ SysBusDevice *adp_v4_create(DTBNode *node, MemoryRegion *dma_mr,
                                                     OBJECT(s->dma_mr)));
     address_space_init(&s->dma_as, s->dma_mr, "disp0.dma");
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
     memory_region_init_io(&s->up_regs, OBJECT(sbd), &adp_v4_reg_ops, sbd,

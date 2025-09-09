@@ -1,5 +1,6 @@
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/sart.h"
+#include "qapi/error.h"
 #include "system/address-spaces.h"
 
 // #define DEBUG_SART
@@ -187,32 +188,27 @@ static void apple_sart_reset(DeviceState *dev)
     memset(s->regions, 0, sizeof(s->regions));
 }
 
-SysBusDevice *apple_sart_create(DTBNode *node)
+SysBusDevice *apple_sart_from_node(AppleDTNode *node)
 {
     DeviceState *dev;
     AppleSARTState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
 
     dev = qdev_new(TYPE_APPLE_SART);
     s = APPLE_SART(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    prop = dtb_find_prop(node, "name");
-    dev->id = g_strdup((const char *)prop->data);
+    dev->id = apple_dt_get_prop_strdup(node, "name", &error_fatal);
 
-    prop = dtb_find_prop(node, "sart-version");
-    if (prop == NULL) { // iOS 13?
-        s->version = 1;
-    } else {
-        g_assert_nonnull(prop);
-        s->version = ldl_le_p(prop->data);
-    }
+    // iOS 13 => v1?
+    s->version =
+        apple_dt_get_prop_u32_or(node, "sart-version", 1, &error_fatal);
     g_assert_cmpuint(s->version, >=, 1);
     g_assert_cmpuint(s->version, <=, 3);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;

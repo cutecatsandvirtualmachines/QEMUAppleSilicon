@@ -21,7 +21,7 @@
 #define HW_MISC_APPLE_SILICON_AOP_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/misc/apple-silicon/a7iop/base.h"
 #include "hw/sysbus.h"
 
@@ -57,7 +57,7 @@ typedef struct {
                                      void *payload_out, uint32_t out_len);
 } AppleAOPEndpointDescription;
 
-SysBusDevice *apple_aop_create(DTBNode *node, AppleA7IOPVersion version,
+SysBusDevice *apple_aop_create(AppleDTNode *node, AppleA7IOPVersion version,
                                uint32_t rtkit_protocol_version);
 AppleAOPEndpoint *apple_aop_ep_create(AppleAOPState *s, void *opaque,
                                       const AppleAOPEndpointDescription *descr);

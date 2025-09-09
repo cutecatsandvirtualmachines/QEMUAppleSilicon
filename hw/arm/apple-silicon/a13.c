@@ -21,7 +21,7 @@
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/a13.h"
 #include "hw/arm/apple-silicon/a13_gxf.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/irq.h"
 #include "hw/or-irq.h"
 #include "hw/qdev-properties.h"
@@ -120,22 +120,22 @@ static QTAILQ_HEAD(, AppleA13Cluster) clusters =
 static uint64_t ipi_cr = kDeferredIPITimerDefault;
 static QEMUTimer *ipicr_timer = NULL;
 
-inline bool apple_a13_cpu_is_sleep(AppleA13State *acpu)
+inline bool apple_a13_is_asleep(AppleA13State *acpu)
 {
     return CPU(acpu)->halted;
 }
 
-inline bool apple_a13_cpu_is_powered_off(AppleA13State *acpu)
+inline bool apple_a13_is_off(AppleA13State *acpu)
 {
     return ARM_CPU(acpu)->power_state == PSCI_OFF;
 }
 
-void apple_a13_cpu_start(AppleA13State *acpu)
+void apple_a13_set_on(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (apple_a13_cpu_is_powered_off(acpu)) {
-        ret = arm_set_cpu_on_and_reset(acpu->mpidr);
+    if (apple_a13_is_off(acpu)) {
+        ret = arm_set_cpu_on_and_reset(ARM_CPU(acpu)->mp_affinity);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
@@ -143,12 +143,12 @@ void apple_a13_cpu_start(AppleA13State *acpu)
     }
 }
 
-void apple_a13_cpu_reset(AppleA13State *acpu)
+void apple_a13_reset(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (!apple_a13_cpu_is_powered_off(acpu)) {
-        ret = arm_reset_cpu(acpu->mpidr);
+    if (!apple_a13_is_off(acpu)) {
+        ret = arm_reset_cpu(ARM_CPU(acpu)->mp_affinity);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
@@ -157,12 +157,12 @@ void apple_a13_cpu_reset(AppleA13State *acpu)
     }
 }
 
-void apple_a13_cpu_off(AppleA13State *acpu)
+void apple_a13_set_off(AppleA13State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
     if (ARM_CPU(acpu)->power_state != PSCI_OFF) {
-        ret = arm_set_cpu_off(acpu->mpidr);
+        ret = arm_set_cpu_off(ARM_CPU(acpu)->mp_affinity);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
@@ -270,7 +270,7 @@ static void apple_a13_cluster_tick(AppleA13Cluster *c)
     for (i = 0; i < A13_MAX_CPU; i++) { /* source */
         for (j = 0; j < A13_MAX_CPU; j++) { /* target */
             if (c->cpus[j] && c->deferredIPI[i][j] &&
-                !apple_a13_cpu_is_powered_off(c->cpus[j])) {
+                !apple_a13_is_off(c->cpus[j])) {
                 apple_a13_cluster_deliver_ipi(c, j, i, IPI_RR_TYPE_DEFERRED);
                 break;
             }
@@ -280,8 +280,8 @@ static void apple_a13_cluster_tick(AppleA13Cluster *c)
     for (i = 0; i < A13_MAX_CPU; i++) { /* source */
         for (j = 0; j < A13_MAX_CPU; j++) { /* target */
             if (c->cpus[j] && c->noWakeIPI[i][j] &&
-                !apple_a13_cpu_is_sleep(c->cpus[j]) &&
-                !apple_a13_cpu_is_powered_off(c->cpus[j])) {
+                !apple_a13_is_asleep(c->cpus[j]) &&
+                !apple_a13_is_off(c->cpus[j])) {
                 apple_a13_cluster_deliver_ipi(c, j, i, IPI_RR_TYPE_NOWAKE);
                 break;
             }
@@ -352,7 +352,7 @@ static void apple_a13_ipi_rr_local(CPUARMState *env, const ARMCPRegInfo *ri,
 
     switch (value & IPI_RR_TYPE_MASK) {
     case IPI_RR_TYPE_NOWAKE:
-        if (apple_a13_cpu_is_sleep(c->cpus[cpu_id])) {
+        if (apple_a13_is_asleep(c->cpus[cpu_id])) {
             c->noWakeIPI[acpu->cpu_id][cpu_id] = 1;
         } else {
             apple_a13_cluster_deliver_ipi(c, cpu_id, acpu->cpu_id,
@@ -412,7 +412,7 @@ static void apple_a13_ipi_rr_global(CPUARMState *env, const ARMCPRegInfo *ri,
 
     switch (value & IPI_RR_TYPE_MASK) {
     case IPI_RR_TYPE_NOWAKE:
-        if (apple_a13_cpu_is_sleep(c->cpus[cpu_id])) {
+        if (apple_a13_is_asleep(c->cpus[cpu_id])) {
             c->noWakeIPI[acpu->cpu_id][cpu_id] = 1;
         } else {
             apple_a13_cluster_deliver_ipi(c, cpu_id, acpu->cpu_id,
@@ -441,7 +441,6 @@ static uint64_t apple_a13_ipi_read_sr(CPUARMState *env, const ARMCPRegInfo *ri)
 {
     AppleA13State *acpu = APPLE_A13(env_archcpu(env));
 
-    g_assert_cmphex(env_archcpu(env)->mp_affinity, ==, acpu->mpidr);
     return acpu->ipi_sr;
 }
 
@@ -659,58 +658,36 @@ static void apple_a13_instance_init(Object *obj)
                                    OBJ_PROP_FLAG_READWRITE);
 }
 
-AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
-                                    uint32_t phys_id, uint32_t cluster_id,
-                                    uint8_t cluster_type)
+AppleA13State *apple_a13_create(const char *name, uint32_t cpu_id,
+                                uint32_t phys_id, uint32_t cluster_id,
+                                uint8_t cluster_type)
 {
     DeviceState *dev;
     AppleA13State *acpu;
     ARMCPU *cpu;
     Object *obj;
-    DTBProp *prop;
-    uint64_t *reg;
+    uint64_t mpidr;
 
     obj = object_new(TYPE_APPLE_A13);
     dev = DEVICE(obj);
     acpu = APPLE_A13(dev);
     cpu = ARM_CPU(acpu);
 
-    if (node) {
-        prop = dtb_find_prop(node, "name");
-        dev->id = g_strdup((char *)prop->data);
+    dev->id = g_strdup(name);
+    acpu->cpu_id = cpu_id;
+    acpu->phys_id = phys_id;
+    acpu->cluster_id = cluster_id;
 
-        prop = dtb_find_prop(node, "cpu-id");
-        g_assert_cmpuint(prop->length, ==, 4);
-        acpu->cpu_id = *(unsigned int *)prop->data;
+    mpidr = acpu->phys_id | (1LL << 31);
 
-        prop = dtb_find_prop(node, "reg");
-        g_assert_cmpuint(prop->length, ==, 4);
-        acpu->phys_id = *(unsigned int *)prop->data;
-
-        prop = dtb_find_prop(node, "cluster-id");
-        g_assert_cmpuint(prop->length, ==, 4);
-        acpu->cluster_id = *(unsigned int *)prop->data;
-    } else {
-        dev->id = g_strdup(name);
-        acpu->cpu_id = cpu_id;
-        acpu->phys_id = phys_id;
-        acpu->cluster_id = cluster_id;
-    }
-
-    acpu->mpidr = acpu->phys_id | (1LL << 31);
-
-    cpu->midr = FIELD_DP64(0, MIDR_EL1, IMPLEMENTER, 0x61); /* Apple */
+    cpu->midr = FIELD_DP64(0, MIDR_EL1, IMPLEMENTER, 0x61); // Apple
     /* chip-revision = (variant << 4) | (revision) */
     cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, VARIANT, 0x1);
     cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, REVISION, 0x1);
 
-    if (node) {
-        prop = dtb_find_prop(node, "cluster-type");
-        cluster_type = *prop->data;
-    }
     switch (cluster_type) {
     case 'P': // Lightning
-        acpu->mpidr |= (1 << ARM_AFF2_SHIFT);
+        mpidr |= (1 << ARM_AFF2_SHIFT);
         cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, PARTNUM, 0x12);
         break;
     case 'E': // Thunder
@@ -720,41 +697,44 @@ AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
         break;
     }
 
-    object_property_set_uint(obj, "mp-affinity", acpu->mpidr, &error_fatal);
-
-    if (node != NULL) {
-        dtb_remove_prop_named(node, "reg-private");
-        dtb_remove_prop_named(node, "cpu-uttdbg-reg");
-    }
-
-    if (acpu->cpu_id == 0) {
-        dtb_set_prop_str(node, "state", "running");
-    }
+    object_property_set_uint(obj, "mp-affinity", mpidr, &error_fatal);
     object_property_set_bool(obj, "start-powered-off", true, NULL);
-
-    // Need to set the CPU frequencies instead of iBoot
-    if (node) {
-        dtb_set_prop_u64(node, "timebase-frequency", 24000000);
-        dtb_set_prop_u64(node, "fixed-frequency", 24000000);
-        dtb_set_prop_u64(node, "peripheral-frequency", 24000000);
-        dtb_set_prop_u64(node, "memory-frequency", 24000000);
-        dtb_set_prop_u64(node, "bus-frequency", 24000000);
-        dtb_set_prop_u64(node, "clock-frequency", 24000000);
-    }
-
     object_property_set_bool(obj, "has_el3", false, NULL);
     object_property_set_bool(obj, "has_el2", false, NULL);
-    object_property_set_bool(obj, "pmu", false,
-                             NULL); // KVM will throw up otherwise
+    // KVM will throw up otherwise
+    object_property_set_bool(obj, "pmu", false, NULL);
 
     memory_region_init(&acpu->memory, obj, "cpu-memory", UINT64_MAX);
     memory_region_init_alias(&acpu->sysmem, obj, "sysmem", get_system_memory(),
                              0, UINT64_MAX);
     memory_region_add_subregion_overlap(&acpu->memory, 0, &acpu->sysmem, -2);
 
-    if (node) {
-        dtb_remove_prop_named(node, "coresight-reg");
+    return acpu;
+}
+
+AppleA13State *apple_a13_from_node(AppleDTNode *node)
+{
+    AppleA13State *acpu;
+
+    acpu = apple_a13_create(
+        apple_dt_get_prop(node, "name")->data,
+        apple_dt_get_prop_u32(node, "cpu-id", &error_fatal),
+        apple_dt_get_prop_u32(node, "reg", &error_fatal),
+        apple_dt_get_prop_u32(node, "cluster-id", &error_fatal),
+        apple_dt_get_prop_u8(node, "cluster-type", &error_warn));
+
+    apple_dt_remove_prop_named(node, "reg-private");
+    apple_dt_remove_prop_named(node, "cpu-uttdbg-reg");
+    if (acpu->cpu_id == 0) {
+        apple_dt_set_prop_str(node, "state", "running");
     }
+    apple_dt_set_prop_u64(node, "timebase-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "fixed-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "peripheral-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "memory-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "bus-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "clock-frequency", 24000000);
+    apple_dt_remove_prop_named(node, "coresight-reg");
 
     return acpu;
 }

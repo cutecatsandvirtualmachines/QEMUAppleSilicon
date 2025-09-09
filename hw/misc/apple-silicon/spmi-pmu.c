@@ -1,8 +1,10 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/irq.h"
 #include "hw/misc/apple-silicon/spmi-pmu.h"
+#include "hw/spmi/spmi.h"
 #include "migration/vmstate.h"
+#include "qapi/error.h"
 #include "qemu/module.h"
 #include "qemu/timer.h"
 #include "system/runstate.h"
@@ -187,33 +189,30 @@ static int apple_spmi_pmu_command(SPMISlave *s, uint8_t opcode, uint16_t addr)
     }
 }
 
-DeviceState *apple_spmi_pmu_create(DTBNode *node)
+DeviceState *apple_spmi_pmu_from_node(AppleDTNode *node)
 {
-    DeviceState *dev = qdev_new(TYPE_APPLE_SPMI_PMU);
-    AppleSPMIPMUState *p = APPLE_SPMI_PMU(dev);
-    DTBProp *prop;
+    DeviceState *dev;
+    AppleSPMIPMUState *p;
+    AppleDTProp *prop;
 
-    prop = dtb_find_prop(node, "reg");
+    dev = qdev_new(TYPE_APPLE_SPMI_PMU);
+    p = APPLE_SPMI_PMU(dev);
+
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
     spmi_set_slave_sid(SPMI_SLAVE(dev), *(uint32_t *)prop->data);
 
-    prop = dtb_find_prop(node, "info-rtc");
-    p->reg_rtc = *(uint32_t *)prop->data;
-
-    prop = dtb_find_prop(node, "info-rtc_alarm_offset");
-    p->reg_alarm = *(uint32_t *)prop->data;
-
-    prop = dtb_find_prop(node, "info-rtc_alarm_ctrl");
-    p->reg_alarm_ctrl = *(uint32_t *)prop->data;
-
-    prop = dtb_find_prop(node, "info-rtc_alarm_event");
-    p->reg_alarm_event = *(uint32_t *)prop->data;
-
-    prop = dtb_find_prop(node, "info-rtc_irq_mask_offset");
-    p->reg_rtc_irq_mask = *(uint32_t *)prop->data;
-
-    prop = dtb_find_prop(node, "info-leg_scrpad");
-    p->reg_leg_scrpad = *(uint32_t *)prop->data;
+    p->reg_rtc = apple_dt_get_prop_u32(node, "info-rtc", &error_fatal);
+    p->reg_alarm =
+        apple_dt_get_prop_u32(node, "info-rtc_alarm_offset", &error_fatal);
+    p->reg_alarm_ctrl =
+        apple_dt_get_prop_u32(node, "info-rtc_alarm_ctrl", &error_fatal);
+    p->reg_alarm_event =
+        apple_dt_get_prop_u32(node, "info-rtc_alarm_event", &error_fatal);
+    p->reg_rtc_irq_mask =
+        apple_dt_get_prop_u32(node, "info-rtc_irq_mask_offset", &error_fatal);
+    p->reg_leg_scrpad =
+        apple_dt_get_prop_u32(node, "info-leg_scrpad", &error_fatal);
 
     p->tick_period = frq_to_period_ns(RTC_TICK_FREQ);
     p->tick_offset = rtc_get_tick(p, &p->rtc_offset);
@@ -223,6 +222,7 @@ DeviceState *apple_spmi_pmu_create(DTBNode *node)
     qemu_system_wakeup_enable(QEMU_WAKEUP_REASON_RTC, true);
 
     qdev_init_gpio_out(dev, &p->irq, 1);
+
     return dev;
 }
 

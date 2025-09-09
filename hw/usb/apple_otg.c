@@ -1,5 +1,5 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/usb/apple_otg.h"
 #include "hw/usb/hcd-dwc2.h"
 #include "migration/vmstate.h"
@@ -173,13 +173,13 @@ static const MemoryRegionOps widget_reg_ops = {
     .read = widget_reg_read,
 };
 
-DeviceState *apple_otg_create(DTBNode *node)
+DeviceState *apple_otg_from_node(AppleDTNode *node)
 {
     DeviceState *dev;
     SysBusDevice *sbd;
     AppleOTGState *s;
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
 
     dev = qdev_new(TYPE_APPLE_OTG);
     sbd = SYS_BUS_DEVICE(dev);
@@ -194,9 +194,9 @@ DeviceState *apple_otg_create(DTBNode *node)
                           TYPE_APPLE_OTG ".usbctl", sizeof(s->usbctl_reg));
     sysbus_init_mmio(sbd, &s->usbctl);
 
-    child = dtb_get_node(node, "usb-device");
+    child = apple_dt_get_node(node, "usb-device");
     g_assert_nonnull(child);
-    prop = dtb_find_prop(child, "reg");
+    prop = apple_dt_get_prop(child, "reg");
     g_assert_nonnull(prop);
 
     object_initialize_child(OBJECT(dev), "dwc2", &s->dwc2, TYPE_DWC2_USB);

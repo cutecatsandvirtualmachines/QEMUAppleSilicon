@@ -785,15 +785,15 @@ static void apple_aop_register_types(void)
 
 type_init(apple_aop_register_types);
 
-SysBusDevice *apple_aop_create(DTBNode *node, AppleA7IOPVersion version,
+SysBusDevice *apple_aop_create(AppleDTNode *node, AppleA7IOPVersion version,
                                uint32_t rtkit_protocol_version)
 {
     DeviceState *dev;
     AppleAOPState *s;
     SysBusDevice *sbd;
     AppleRTKit *rtk;
-    DTBNode *child;
-    DTBProp *prop;
+    AppleDTNode *child;
+    AppleDTProp *prop;
     uint64_t *reg;
 
     dev = qdev_new(TYPE_APPLE_AOP);
@@ -802,10 +802,10 @@ SysBusDevice *apple_aop_create(DTBNode *node, AppleA7IOPVersion version,
     rtk = APPLE_RTKIT(dev);
     dev->id = g_strdup("aop");
 
-    child = dtb_get_node(node, "iop-aop-nub");
+    child = apple_dt_get_node(node, "iop-aop-nub");
     g_assert_nonnull(child);
 
-    prop = dtb_find_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
 
     reg = (uint64_t *)prop->data;
@@ -817,10 +817,10 @@ SysBusDevice *apple_aop_create(DTBNode *node, AppleA7IOPVersion version,
                           TYPE_APPLE_AOP ".ascv2-core-reg", reg[3]);
     sysbus_init_mmio(sbd, &s->ascv2_iomem);
 
-    prop = dtb_find_prop(child, "aop-memory-alignment");
-    s->align = prop == NULL ? 0x40 : ldl_le_p(prop->data);
+    s->align = apple_dt_get_prop_u32_or(child, "aop-memory-alignment", 0x40,
+                                         &error_fatal);
 
-    dtb_set_prop_u32(child, "pre-loaded", 1);
+    apple_dt_set_prop_u32(child, "pre-loaded", 1);
 
     return sbd;
 }

@@ -20,7 +20,7 @@
 
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/a9.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/or-irq.h"
 #include "hw/qdev-properties.h"
 #include "migration/vmstate.h"
@@ -51,22 +51,22 @@
                        offsetof(ARMCPU, env),                              \
     }
 
-inline bool apple_a9_cpu_is_sleep(AppleA9State *acpu)
+inline bool apple_a9_cpu_is_asleep(AppleA9State *acpu)
 {
     return CPU(acpu)->halted;
 }
 
-inline bool apple_a9_cpu_is_powered_off(AppleA9State *acpu)
+inline bool apple_a9_cpu_is_off(AppleA9State *acpu)
 {
     return ARM_CPU(acpu)->power_state == PSCI_OFF;
 }
 
-void apple_a9_cpu_start(AppleA9State *acpu)
+void apple_a9_cpu_set_on(AppleA9State *acpu)
 {
     int ret = QEMU_ARM_POWERCTL_RET_SUCCESS;
 
-    if (apple_a9_cpu_is_powered_off(acpu)) {
-        ret = arm_set_cpu_on_and_reset(acpu->mpidr);
+    if (apple_a9_cpu_is_off(acpu)) {
+        ret = arm_set_cpu_on_and_reset(ARM_CPU(acpu)->mp_affinity);
     }
 
     if (ret != QEMU_ARM_POWERCTL_RET_SUCCESS) {
@@ -154,84 +154,72 @@ static void apple_a9_instance_init(Object *obj)
     object_property_set_uint(obj, "cntfrq", 24000000, &error_fatal);
 }
 
-AppleA9State *apple_a9_create(DTBNode *node, char *name, uint32_t cpu_id,
+AppleA9State *apple_a9_create(const char *name, uint32_t cpu_id,
                               uint32_t phys_id)
 {
     DeviceState *dev;
     AppleA9State *acpu;
     ARMCPU *cpu;
     Object *obj;
-    DTBProp *prop;
+    uint64_t mpidr;
 
     obj = object_new(TYPE_APPLE_A9);
     dev = DEVICE(obj);
     acpu = APPLE_A9(dev);
     cpu = ARM_CPU(acpu);
 
-    if (node) {
-        prop = dtb_find_prop(node, "name");
-        dev->id = g_strdup((char *)prop->data);
+    dev->id = g_strdup(name);
+    acpu->cpu_id = cpu_id;
+    acpu->phys_id = phys_id;
 
-        prop = dtb_find_prop(node, "cpu-id");
-        g_assert_cmpuint(prop->length, ==, 4);
-        acpu->cpu_id = *(unsigned int *)prop->data;
-
-        prop = dtb_find_prop(node, "reg");
-        g_assert_cmpuint(prop->length, ==, 4);
-        acpu->phys_id = *(unsigned int *)prop->data;
-    } else {
-        dev->id = g_strdup(name);
-        acpu->cpu_id = cpu_id;
-        acpu->phys_id = phys_id;
-    }
-
-    acpu->mpidr = acpu->phys_id | (1LL << 31) | (1 << ARM_AFF2_SHIFT);
+    mpidr = acpu->phys_id | (1LL << 31) | (1 << ARM_AFF2_SHIFT);
 
     cpu->midr = FIELD_DP64(0, MIDR_EL1, IMPLEMENTER, 0x61);
     cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, ARCHITECTURE, 0xf);
-    cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, PARTNUM, 0x4); /* Maui */
-    cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, VARIANT, 0x1); /* B1 */
+    cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, PARTNUM, 0x4); // Maui
+    cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, VARIANT, 0x1); // B1
     cpu->midr = FIELD_DP64(cpu->midr, MIDR_EL1, REVISION, 0x1);
 
     SET_IDREG(
         &cpu->isar, ID_AA64MMFR1,
         FIELD_DP64(GET_IDREG(&cpu->isar, ID_AA64MMFR1), ID_AA64MMFR1, PAN, 0));
 
-    object_property_set_uint(obj, "mp-affinity", acpu->mpidr, &error_fatal);
-
-    if (node != NULL) {
-        dtb_remove_prop_named(node, "reg-private");
-        dtb_remove_prop_named(node, "cpu-uttdbg-reg");
-    }
-
-    if (acpu->cpu_id == 0) {
-        dtb_set_prop_str(node, "state", "running");
-    }
+    object_property_set_uint(obj, "mp-affinity", mpidr, &error_fatal);
     object_property_set_bool(obj, "start-powered-off", true, NULL);
-
-    // Need to set the CPU frequencies instead of iBoot
-    if (node) {
-        dtb_set_prop_u64(node, "timebase-frequency", 24000000);
-        dtb_set_prop_u64(node, "fixed-frequency", 24000000);
-        dtb_set_prop_u64(node, "peripheral-frequency", 24000000);
-        dtb_set_prop_u64(node, "memory-frequency", 24000000);
-        dtb_set_prop_u64(node, "bus-frequency", 24000000);
-        dtb_set_prop_u64(node, "clock-frequency", 24000000);
-    }
-
     object_property_set_bool(obj, "has_el3", true, NULL);
     object_property_set_bool(obj, "has_el2", true, NULL);
-    object_property_set_bool(obj, "pmu", false,
-                             NULL); // KVM will throw up otherwise
+    // KVM will throw up otherwise
+    object_property_set_bool(obj, "pmu", false, NULL);
 
     memory_region_init(&acpu->memory, obj, "cpu-memory", UINT64_MAX);
     memory_region_init_alias(&acpu->sysmem, obj, "sysmem", get_system_memory(),
                              0, UINT64_MAX);
     memory_region_add_subregion_overlap(&acpu->memory, 0, &acpu->sysmem, -2);
 
-    if (node) {
-        dtb_remove_prop_named(node, "coresight-reg");
+    return acpu;
+}
+
+AppleA9State *apple_a9_from_node(AppleDTNode *node)
+{
+    AppleA9State *acpu;
+
+    acpu =
+        apple_a9_create(apple_dt_get_prop(node, "name")->data,
+                        apple_dt_get_prop_u32(node, "cpu-id", &error_fatal),
+                        apple_dt_get_prop_u32(node, "reg", &error_fatal));
+
+    apple_dt_remove_prop_named(node, "reg-private");
+    apple_dt_remove_prop_named(node, "cpu-uttdbg-reg");
+    if (acpu->cpu_id == 0) {
+        apple_dt_set_prop_str(node, "state", "running");
     }
+    apple_dt_set_prop_u64(node, "timebase-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "fixed-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "peripheral-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "memory-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "bus-frequency", 24000000);
+    apple_dt_set_prop_u64(node, "clock-frequency", 24000000);
+    apple_dt_remove_prop_named(node, "coresight-reg");
 
     return acpu;
 }

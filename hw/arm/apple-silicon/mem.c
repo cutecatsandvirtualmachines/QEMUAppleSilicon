@@ -19,7 +19,7 @@
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/arm/apple-silicon/mem.h"
 #include "qapi/error.h"
 #include "system/memory.h"
@@ -69,12 +69,13 @@ struct CarveoutAllocator {
     hwaddr dram_base;
     hwaddr end;
     hwaddr alignment;
-    DTBNode *node;
+    AppleDTNode *node;
     uint32_t cur_id;
 };
 
-CarveoutAllocator *carveout_alloc_new(DTBNode *carveout_mmap, hwaddr dram_base,
-                                      hwaddr dram_size, hwaddr alignment)
+CarveoutAllocator *carveout_alloc_new(AppleDTNode *carveout_mmap,
+                                      hwaddr dram_base, hwaddr dram_size,
+                                      hwaddr alignment)
 {
     CarveoutAllocator *ca;
 
@@ -104,7 +105,7 @@ hwaddr carveout_alloc_mem(CarveoutAllocator *ca, hwaddr size)
     data[1] = size;
     memset(region_name, 0, sizeof(region_name));
     snprintf(region_name, sizeof(region_name), "region-id-%d", ca->cur_id);
-    dtb_set_prop(ca->node, region_name, sizeof(data), data);
+    apple_dt_set_prop(ca->node, region_name, sizeof(data), data);
 
     ca->cur_id += 1;
     if (ca->cur_id == 55) { // This is an iBoot profiler region. SKIP!
