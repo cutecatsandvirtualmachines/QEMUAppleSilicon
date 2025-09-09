@@ -610,7 +610,7 @@ void apple_boot_finalise_dt(AppleDTNode *root, AddressSpace *as,
     set_memory_range(root, "DeviceTree", info->device_tree_addr,
                      info->device_tree_size);
 
-    buf = g_malloc(info->device_tree_size);
+    buf = g_malloc0(info->device_tree_size);
     apple_dt_serialise(root, buf);
 
     address_space_rw(as, info->device_tree_addr, MEMTXATTRS_UNSPECIFIED, buf,
