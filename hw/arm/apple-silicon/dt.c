@@ -28,7 +28,7 @@
 #include "qapi/error.h"
 #include "qemu/cutils.h"
 
-#if 1
+#if 0
 #include "qemu/error-report.h"
 #define DINFO(fmt, ...) info_report(fmt, ##__VA_ARGS__)
 #define DWARN(fmt, ...) warn_report(fmt, ##__VA_ARGS__)
