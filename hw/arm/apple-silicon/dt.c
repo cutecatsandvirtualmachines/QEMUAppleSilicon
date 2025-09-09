@@ -508,8 +508,8 @@ char *apple_dt_get_prop_strdup_or(AppleDTNode *node, const char *name,
         return _accessor(prop->data);                                          \
     }
 
-#define DEFINE_GET_PROP_LD(_sign, _width, _ldprefix) \
-    DEFINE_GET_PROP_INT(_sign, _width, ld##_ldprefix##_le_p)
+#define DEFINE_GET_PROP_LD(_sign, _width, _ldsuffix) \
+    DEFINE_GET_PROP_INT(_sign, _width, ld##_ldsuffix##_le_p)
 
 DEFINE_GET_PROP_INT(u, 8, *(uint8_t *));
 DEFINE_GET_PROP_LD(u, 16, uw);
