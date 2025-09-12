@@ -97,7 +97,7 @@ typedef struct {
     uint32_t reserved3;
 } MachoSection64;
 
-#define SECTION_TYPE (0x000000ff)
+#define SECTION_TYPE (0x000000FF)
 #define S_NON_LAZY_SYMBOL_POINTERS (0x6)
 
 typedef struct {
@@ -319,18 +319,16 @@ MachoHeader64 *apple_boot_load_macho_file(const char *filename,
 
 MachoHeader64 *apple_boot_parse_macho(uint8_t *data, uint32_t len);
 
-uint8_t *apple_boot_get_macho_buffer(MachoHeader64 *hdr);
+uint8_t *apple_boot_get_macho_buffer(MachoHeader64 *header);
 
-uint32_t apple_boot_build_version(MachoHeader64 *mh);
+uint32_t apple_boot_build_version(MachoHeader64 *header);
 
-uint32_t apple_boot_platform(MachoHeader64 *mh);
+uint32_t apple_boot_platform(MachoHeader64 *header);
 
-const char *apple_boot_platform_string(MachoHeader64 *mh);
+const char *apple_boot_platform_string(MachoHeader64 *header);
 
-void apple_boot_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,
-                               uint64_t *highaddr);
-
-void apple_boot_text_base(MachoHeader64 *mh, uint64_t *text_base);
+void apple_boot_get_kc_bounds(MachoHeader64 *header, uint64_t *text_base,
+                              uint64_t *kc_base, uint64_t *kc_end);
 
 MachoFilesetEntryCommand *apple_boot_get_fileset(MachoHeader64 *header,
                                                  const char *entry);
@@ -339,9 +337,9 @@ MachoHeader64 *apple_boot_get_fileset_header(MachoHeader64 *header,
                                              const char *entry);
 
 MachoSegmentCommand64 *apple_boot_get_segment(MachoHeader64 *header,
-                                              const char *segname);
+                                              const char *name);
 
-MachoSection64 *apple_boot_get_section(MachoSegmentCommand64 *seg,
+MachoSection64 *apple_boot_get_section(MachoSegmentCommand64 *segment,
                                        const char *name);
 
 /// Modify a XNU virtual address to be fixed up and slide-adjusted.
@@ -350,8 +348,8 @@ hwaddr apple_boot_fixup_slide_va(hwaddr va);
 /// Convert a XNU virtual address to a host pointer.
 void *apple_boot_va_to_ptr(hwaddr va);
 
-bool apple_boot_contains_boot_arg(const char *bootArgs, const char *arg,
-                                  bool prefixmatch);
+bool apple_boot_contains_boot_arg(const char *boot_args, const char *arg,
+                                  bool match_prefix);
 
 void apple_boot_setup_monitor_boot_args(
     AddressSpace *as, MemoryRegion *mem, hwaddr bootargs_addr, hwaddr virt_base,
@@ -366,9 +364,9 @@ void apple_boot_setup_bootargs(uint32_t build_version, AddressSpace *as,
                                const char *cmdline, hwaddr mem_size_actual);
 
 void apple_boot_allocate_segment_records(AppleDTNode *memory_map,
-                                         MachoHeader64 *mh);
+                                         MachoHeader64 *header);
 
-hwaddr apple_boot_load_macho(MachoHeader64 *mh, AddressSpace *as,
+hwaddr apple_boot_load_macho(MachoHeader64 *header, AddressSpace *as,
                              MemoryRegion *mem, AppleDTNode *memory_map,
                              hwaddr phys_base, hwaddr virt_slide);
 
@@ -385,7 +383,7 @@ void apple_boot_finalise_dt(AppleDTNode *root, AddressSpace *as,
 
 uint8_t *apple_boot_load_trustcache_file(const char *filename, uint64_t *size);
 
-void macho_load_ramdisk(const char *filename, AddressSpace *as,
-                        MemoryRegion *mem, hwaddr pa, uint64_t *size);
+void apple_boot_load_ramdisk(const char *filename, AddressSpace *as,
+                             MemoryRegion *mem, hwaddr pa, uint64_t *size);
 
 #endif /* HW_ARM_APPLE_SILICON_BOOT_H */

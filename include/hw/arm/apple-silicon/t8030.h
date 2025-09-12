@@ -30,16 +30,14 @@
 #include "hw/usb/tcp-usb.h"
 #include "system/kvm.h"
 
-#define TYPE_T8030 "t8030"
+#define TYPE_APPLE_T8030 MACHINE_TYPE_NAME("t8030")
 
-#define TYPE_T8030_MACHINE MACHINE_TYPE_NAME(TYPE_T8030)
-
-#define T8030_MACHINE(obj) \
-    OBJECT_CHECK(T8030MachineState, (obj), TYPE_T8030_MACHINE)
+#define APPLE_T8030(obj) \
+    OBJECT_CHECK(AppleT8030MachineState, (obj), TYPE_APPLE_T8030)
 
 typedef struct {
     MachineClass parent;
-} T8030MachineClass;
+} AppleT8030MachineClass;
 
 typedef enum {
     kBootModeAuto = 0,
@@ -93,6 +91,6 @@ typedef struct {
     char *serial_number;
     char *mlb_serial_number;
     char *regulatory_model;
-} T8030MachineState;
+} AppleT8030MachineState;
 
 #endif /* HW_ARM_APPLE_SILICON_T8030_H */

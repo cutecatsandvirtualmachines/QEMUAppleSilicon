@@ -31,16 +31,14 @@
 #include "hw/usb/tcp-usb.h"
 #include "system/kvm.h"
 
-#define TYPE_S8000 "s8000"
+#define TYPE_APPLE_S8000 MACHINE_TYPE_NAME("s8000")
 
-#define TYPE_S8000_MACHINE MACHINE_TYPE_NAME(TYPE_S8000)
-
-#define S8000_MACHINE(obj) \
-    OBJECT_CHECK(S8000MachineState, (obj), TYPE_S8000_MACHINE)
+#define APPLE_S8000(obj) \
+    OBJECT_CHECK(AppleS8000MachineState, (obj), TYPE_APPLE_S8000)
 
 typedef struct {
     MachineClass parent;
-} S8000MachineClass;
+} AppleS8000MachineClass;
 
 typedef enum {
     kBootModeAuto = 0,
@@ -86,6 +84,6 @@ typedef struct {
     USBTCPRemoteConnType usb_conn_type;
     char *usb_conn_addr;
     uint16_t usb_conn_port;
-} S8000MachineState;
+} AppleS8000MachineState;
 
 #endif /* HW_ARM_APPLE_SILICON_S8000_H */
