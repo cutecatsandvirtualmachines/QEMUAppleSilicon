@@ -628,6 +628,7 @@ void apple_boot_finalise_dt(AppleDTNode *root, AddressSpace *as,
 
     address_space_rw(as, info->device_tree_addr, MEMTXATTRS_UNSPECIFIED, buf,
                      info->device_tree_size, true);
+    g_free(buf);
 }
 
 uint8_t *apple_boot_load_trustcache_file(const char *filename, uint64_t *size)
