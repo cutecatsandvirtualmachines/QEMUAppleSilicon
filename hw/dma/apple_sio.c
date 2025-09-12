@@ -51,7 +51,7 @@ typedef struct {
     uint32_t timeout;
     uint32_t fifo;
     uint32_t trigger;
-    uint32_t depth;
+    uint32_t field_10;
     uint32_t field_14;
     uint32_t field_18;
 } QEMU_PACKED SIODMAConfig;
@@ -593,7 +593,7 @@ static const VMStateDescription vmstate_sio_dma_config = {
             VMSTATE_UINT32(timeout, SIODMAConfig),
             VMSTATE_UINT32(fifo, SIODMAConfig),
             VMSTATE_UINT32(trigger, SIODMAConfig),
-            VMSTATE_UINT32(depth, SIODMAConfig),
+            VMSTATE_UINT32(field_10, SIODMAConfig),
             VMSTATE_UINT32(field_14, SIODMAConfig),
             VMSTATE_UINT32(field_18, SIODMAConfig),
             VMSTATE_END_OF_LIST(),
