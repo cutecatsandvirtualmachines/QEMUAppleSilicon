@@ -1073,7 +1073,7 @@ static void s8000_create_spi(AppleS8000MachineState *s8000, uint32_t port)
 
     prop = apple_dt_get_prop(child, "function-spi_cs0");
     g_assert_nonnull(prop);
-    if (prop->len > sizeof(uint32_t) * 3) {
+    if (prop->len >= sizeof(uint32_t) * 3) {
         ints = (uint32_t *)prop->data;
         cs_pin = ints[2];
         gpio = DEVICE(
