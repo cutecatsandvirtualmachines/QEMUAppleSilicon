@@ -19,6 +19,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "block/aio.h"
 #include "hw/arm/apple-silicon/mt-spi.h"
 #include "hw/irq.h"
 #include "hw/ssi/ssi.h"
@@ -26,6 +27,7 @@
 #include "qemu/crc16.h"
 #include "qemu/error-report.h"
 #include "qemu/lockable.h"
+#include "qemu/main-loop.h"
 #include "qemu/timer.h"
 #include "ui/console.h"
 #include "ui/input.h"
@@ -772,13 +774,10 @@ static uint32_t apple_mt_spi_transfer(SSIPeripheral *dev, uint32_t val)
     return ret;
 }
 
-static void apple_mt_spi_send_path_update(AppleMTSPIState *s,
+static void apple_mt_spi_send_path_update(AppleMTSPIState *s, uint32_t ts,
                                           uint8_t path_stage)
 {
-    uint32_t ts;
     AppleMTSPILLPacket *packet;
-
-    ts = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) / SCALE_MS;
 
     packet = g_new0(AppleMTSPILLPacket, 1);
 
@@ -837,14 +836,50 @@ static void apple_mt_spi_send_path_update(AppleMTSPIState *s,
     s->prev_ts = ts;
 }
 
-static void touch_timer_tick(void *opaque)
+typedef struct {
+    AppleMTSPIState *s;
+    uint64_t ts;
+    uint8_t path_stage;
+} AppleMTSPITouchUpdate;
+
+static AppleMTSPITouchUpdate *apple_mt_spi_new_touch_update(AppleMTSPIState *s,
+                                                            uint8_t path_stage)
+{
+    AppleMTSPITouchUpdate *update = g_new(AppleMTSPITouchUpdate, 1);
+    update->s = s;
+    update->ts = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    update->path_stage = path_stage;
+    return update;
+}
+
+static void apple_mt_spi_send_touch_update_bh(void *opaque)
+{
+    AppleMTSPITouchUpdate *update = opaque;
+
+    QEMU_LOCK_GUARD(&update->s->lock);
+
+    apple_mt_spi_send_path_update(update->s, update->ts / SCALE_MS,
+                                  update->path_stage);
+
+    g_free(opaque);
+}
+
+static void apple_mt_spi_schedule_touch_update(AppleMTSPIState *s,
+                                               uint8_t path_stage)
+{
+    aio_bh_schedule_oneshot(qemu_get_aio_context(),
+                            apple_mt_spi_send_touch_update_bh,
+                            apple_mt_spi_new_touch_update(s, path_stage));
+}
+
+static void apple_mt_spi_timer_tick(void *opaque)
 {
     AppleMTSPIState *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 
     if (s->prev_x != s->x || s->prev_y != s->y) {
-        apple_mt_spi_send_path_update(s, PATH_STAGE_TOUCHING);
+        apple_mt_spi_schedule_touch_update(s, PATH_STAGE_TOUCHING);
     }
 
     if (s->btn_state & MOUSE_EVENT_LBUTTON) {
@@ -853,13 +888,13 @@ static void touch_timer_tick(void *opaque)
     }
 }
 
-static void touch_end_timer_tick(void *opaque)
+static void apple_mt_spi_end_timer_tick(void *opaque)
 {
     AppleMTSPIState *s = opaque;
 
     QEMU_LOCK_GUARD(&s->lock);
 
-    apple_mt_spi_send_path_update(s, PATH_STAGE_OUT_OF_RANGE);
+    apple_mt_spi_schedule_touch_update(s, PATH_STAGE_OUT_OF_RANGE);
 
     s->prev_ts = 0;
     s->prev_x = 0;
@@ -888,18 +923,18 @@ static void apple_mt_spi_mouse_event(void *opaque, int dx, int dy, int dz,
 
     if (s->btn_state & MOUSE_EVENT_LBUTTON) {
         if (!(s->prev_btn_state & MOUSE_EVENT_LBUTTON)) {
-            apple_mt_spi_send_path_update(s, PATH_STAGE_MAKE_TOUCH);
+            apple_mt_spi_schedule_touch_update(s, PATH_STAGE_MAKE_TOUCH);
 
             timer_del(s->end_timer);
             timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-                                    NANOSECONDS_PER_SECOND / 20);
+                                    NANOSECONDS_PER_SECOND / 10);
         }
     } else if (s->prev_btn_state & MOUSE_EVENT_LBUTTON) {
-        apple_mt_spi_send_path_update(s, PATH_STAGE_BREAK_TOUCH);
+        apple_mt_spi_schedule_touch_update(s, PATH_STAGE_BREAK_TOUCH);
 
         timer_del(s->timer);
         timer_mod(s->end_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-                                    NANOSECONDS_PER_SECOND / 20);
+                                    NANOSECONDS_PER_SECOND / 10);
     }
 }
 static void apple_mt_spi_realize(SSIPeripheral *dev, Error **errp)
@@ -995,8 +1030,9 @@ static void apple_mt_instance_init(Object *obj)
     s = APPLE_MT_SPI(obj);
 
     qdev_init_gpio_out_named(DEVICE(s), &s->irq, APPLE_MT_SPI_IRQ, 1);
-    s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, touch_timer_tick, s);
-    s->end_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, touch_end_timer_tick, s);
+    s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, apple_mt_spi_timer_tick, s);
+    s->end_timer =
+        timer_new_ns(QEMU_CLOCK_VIRTUAL, apple_mt_spi_end_timer_tick, s);
 
     QTAILQ_INIT(&s->pending_fw);
 
