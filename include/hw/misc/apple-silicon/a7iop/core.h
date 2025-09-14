@@ -63,7 +63,7 @@ uint32_t apple_a7iop_get_cpu_ctrl(AppleA7IOP *s);
 void apple_a7iop_set_cpu_ctrl(AppleA7IOP *s, uint32_t value);
 void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
                       AppleA7IOPVersion version, const AppleA7IOPOps *ops,
-                      QEMUBH *iop_bh);
+                      QEMUBHFunc *handle_messages_func);
 
 extern const VMStateDescription vmstate_apple_a7iop;
 

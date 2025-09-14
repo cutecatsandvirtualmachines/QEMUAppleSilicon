@@ -71,7 +71,7 @@ void apple_a7iop_set_cpu_ctrl(AppleA7IOP *s, uint32_t value)
 
 void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
                       AppleA7IOPVersion version, const AppleA7IOPOps *ops,
-                      QEMUBH *iop_bh)
+                      QEMUBHFunc *handle_messages_func)
 {
     DeviceState *dev;
     SysBusDevice *sbd;
@@ -86,13 +86,14 @@ void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
     qemu_mutex_init(&s->lock);
 
     snprintf(name, sizeof(name), "%s-iop", s->role);
-    s->iop_mailbox = apple_a7iop_mailbox_new(name, version, NULL, NULL, iop_bh);
+    s->iop_mailbox = apple_a7iop_mailbox_new(name, version, NULL, NULL, s,
+                                             handle_messages_func);
     object_property_add_child(OBJECT(dev), "iop-mailbox",
                               OBJECT(s->iop_mailbox));
 
     snprintf(name, sizeof(name), "%s-ap", s->role);
-    s->ap_mailbox =
-        apple_a7iop_mailbox_new(name, version, s->iop_mailbox, NULL, NULL);
+    s->ap_mailbox = apple_a7iop_mailbox_new(name, version, s->iop_mailbox, NULL,
+                                            NULL, NULL);
     s->iop_mailbox->ap_mailbox = s->ap_mailbox;
     object_property_add_child(OBJECT(dev), "ap-mailbox", OBJECT(s->ap_mailbox));
 

@@ -19,6 +19,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "block/aio.h"
 #include "hw/display/apple_displaypipe_v4.h"
 #include "hw/irq.h"
 #include "hw/qdev-properties.h"
@@ -382,13 +383,13 @@ static void adp_v4_blend_reg_write(ADPV4BlendUnitState *s, uint64_t addr,
     switch (addr) {
     case REG_BLEND_LAYER_0_CONFIG: {
         ADP_INFO("blend: layer 0 config <- 0x" HWADDR_FMT_plx, data);
+        s->dirty |= s->layer_config[0] != (uint32_t)data;
         s->layer_config[0] = (uint32_t)data;
-        s->dirty = true;
         break;
     }
     case REG_BLEND_LAYER_1_CONFIG: {
+        s->dirty |= s->layer_config[1] != (uint32_t)data;
         s->layer_config[1] = (uint32_t)data;
-        s->dirty = true;
         ADP_INFO("blend: layer 1 config <- 0x" HWADDR_FMT_plx, data);
         break;
     }
@@ -724,6 +725,21 @@ static void adp_v4_register_types(void)
 
 type_init(adp_v4_register_types);
 
+static void adp_v4_blit_single_layer(AppleDisplayPipeV4State *s,
+                                     ADPV4GenPipeState *gp)
+{
+    size_t i;
+    hwaddr off;
+
+    for (i = 0; i < gp->height; i += 1) {
+        off = i * s->width * sizeof(uint32_t);
+        memcpy(adp_v4_get_ram_ptr(s) + off, gp->buf + i * gp->stride,
+               gp->width * sizeof(uint32_t));
+        adp_v4_set_dirty(s, off, gp->width * sizeof(uint32_t));
+    }
+    gp->dirty = false;
+}
+
 // TODO: Where is the destination X and Y?
 static void adp_v4_update_disp_image_bh(void *opaque)
 {
@@ -732,8 +748,6 @@ static void adp_v4_update_disp_image_bh(void *opaque)
     ADPV4GenPipeState *layer_1_gp;
     uint8_t layer_0_blend;
     uint8_t layer_1_blend;
-    size_t i;
-    hwaddr off;
     pixman_format_code_t layer_0_fmt;
     pixman_format_code_t layer_1_fmt;
     pixman_image_t *layer_0_img;
@@ -750,57 +764,32 @@ static void adp_v4_update_disp_image_bh(void *opaque)
 
     if ((layer_0_blend == BLEND_MODE_NONE &&
          layer_1_blend == BLEND_MODE_NONE) ||
-        ((layer_0_gp->frame_width == 0 || layer_0_gp->frame_height == 0) &&
-         (layer_1_gp->frame_width == 0 || layer_1_gp->frame_height == 0))) {
+        ((layer_0_gp->config_control & GP_CONFIG_CONTROL_ENABLED) == 0 &&
+         (layer_1_gp->config_control & GP_CONFIG_CONTROL_ENABLED) == 0) ||
+        (layer_0_gp->buf == NULL && layer_1_gp->buf == NULL)) {
         return;
     }
 
-    if (layer_1_blend == BLEND_MODE_BYPASS ||
-        (layer_1_blend != BLEND_MODE_NONE &&
-         layer_0_blend == BLEND_MODE_NONE)) {
-        if (layer_1_gp->base != 0 && layer_1_gp->end != 0) {
-            g_assert_nonnull(layer_1_gp->buf);
-            for (i = 0; i < layer_1_gp->height; i += 1) {
-                off = i * s->width * sizeof(uint32_t);
-                memcpy(adp_v4_get_ram_ptr(s) + off,
-                       layer_1_gp->buf + i * layer_1_gp->stride,
-                       layer_1_gp->width * sizeof(uint32_t));
-                adp_v4_set_dirty(s, off, layer_1_gp->width * sizeof(uint32_t));
-            }
-        }
-        layer_1_gp->dirty = false;
-    } else if (layer_0_blend == BLEND_MODE_BYPASS ||
-               (layer_0_blend != BLEND_MODE_NONE &&
-                layer_1_blend == BLEND_MODE_NONE)) {
-        if (layer_0_gp->base != 0 && layer_0_gp->end != 0) {
-            g_assert_nonnull(layer_0_gp->buf);
-            for (i = 0; i < layer_0_gp->height; i += 1) {
-                off = i * s->width * sizeof(uint32_t);
-                memcpy(adp_v4_get_ram_ptr(s) + off,
-                       layer_0_gp->buf + i * layer_0_gp->stride,
-                       layer_0_gp->width * sizeof(uint32_t));
-                adp_v4_set_dirty(s, off, layer_0_gp->width * sizeof(uint32_t));
-            }
-        }
-        layer_0_gp->dirty = false;
+    if (layer_0_blend == BLEND_MODE_BYPASS ||
+        (layer_0_blend != BLEND_MODE_NONE &&
+         layer_1_blend == BLEND_MODE_NONE)) {
+        adp_v4_blit_single_layer(s, layer_0_gp);
+    } else if (layer_1_blend == BLEND_MODE_BYPASS ||
+               (layer_1_blend != BLEND_MODE_NONE &&
+                layer_0_blend == BLEND_MODE_NONE)) {
+        adp_v4_blit_single_layer(s, layer_1_gp);
     } else {
         g_assert_false(layer_0_gp == layer_1_gp);
 
-        g_assert_nonnull(layer_0_gp->buf);
         layer_0_fmt = adp_v4_gp_fmt_to_pixman(layer_0_gp);
-        g_assert_cmphex(layer_0_fmt, !=, 0);
         layer_0_img = pixman_image_create_bits(
             layer_0_fmt, layer_0_gp->width, layer_0_gp->height,
             (uint32_t *)layer_0_gp->buf, layer_0_gp->stride);
-        g_assert_nonnull(layer_0_img);
 
-        g_assert_nonnull(layer_1_gp->buf);
         layer_1_fmt = adp_v4_gp_fmt_to_pixman(layer_1_gp);
-        g_assert_cmphex(layer_1_fmt, !=, 0);
         layer_1_img = pixman_image_create_bits(
             layer_1_fmt, layer_1_gp->width, layer_1_gp->height,
             (uint32_t *)layer_1_gp->buf, layer_1_gp->stride);
-        g_assert_nonnull(layer_1_img);
 
         adp_v4_blit_rect_black(s, s->width, s->height);
 
@@ -851,8 +840,8 @@ SysBusDevice *adp_v4_from_node(AppleDTNode *node, MemoryRegion *dma_mr,
 
     qemu_mutex_init(&s->lock);
 
-    s->update_disp_image_bh = qemu_bh_new_guarded(
-        adp_v4_update_disp_image_bh, s, &DEVICE(s)->mem_reentrancy_guard);
+    s->update_disp_image_bh =
+        aio_bh_new(qemu_get_aio_context(), adp_v4_update_disp_image_bh, s);
 
     apple_dt_set_prop_str(node, "display-target", "DisplayTarget5");
     apple_dt_set_prop(node, "display-timing-info", sizeof(adp_timing_info),

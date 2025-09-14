@@ -107,7 +107,7 @@ struct AppleRTKit {
     void *opaque;
     uint8_t ep0_status;
     uint32_t protocol_version;
-    GTree *endpoints;
+    GHashTable *endpoints;
     QTAILQ_HEAD(, AppleA7IOPMessage) rollcall;
 };
 

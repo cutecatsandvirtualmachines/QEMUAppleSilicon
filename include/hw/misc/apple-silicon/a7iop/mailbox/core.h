@@ -2,6 +2,7 @@
 #define HW_MISC_APPLE_SILICON_A7IOP_MAILBOX_CORE_H
 
 #include "qemu/osdep.h"
+#include "block/aio.h"
 #include "hw/misc/apple-silicon/a7iop/base.h"
 #include "hw/sysbus.h"
 #include "migration/vmstate.h"
@@ -65,7 +66,7 @@ struct AppleA7IOPMailbox {
     const char *role;
     QemuMutex lock;
     MemoryRegion mmio;
-    QEMUBH *bh;
+    QEMUBH *handle_messages_bh;
     QTAILQ_HEAD(, AppleA7IOPMessage) inbox;
     QTAILQ_HEAD(, AppleA7IOPInterruptStatusMessage) interrupt_status;
     uint32_t count;
@@ -101,6 +102,7 @@ AppleA7IOPMailbox *apple_a7iop_mailbox_new(const char *role,
                                            AppleA7IOPVersion version,
                                            AppleA7IOPMailbox *iop_mailbox,
                                            AppleA7IOPMailbox *ap_mailbox,
-                                           QEMUBH *bh);
+                                           void *opaque,
+                                           QEMUBHFunc *handle_messages_func);
 
 #endif /* HW_MISC_APPLE_SILICON_A7IOP_MAILBOX_CORE_H */

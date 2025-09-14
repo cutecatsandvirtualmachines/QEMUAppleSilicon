@@ -32,6 +32,7 @@
 #include "qemu/bitops.h"
 #include "qemu/lockable.h"
 #include "qemu/log.h"
+#include "qemu/main-loop.h"
 #include "qemu/queue.h"
 
 #define MAX_MESSAGE_COUNT (15)
@@ -175,8 +176,8 @@ static void apple_a7iop_mailbox_send(AppleA7IOPMailbox *s,
     s->count++;
     apple_a7iop_mailbox_update_irq(s);
 
-    if (s->bh != NULL) {
-        qemu_bh_schedule(s->bh);
+    if (s->handle_messages_bh != NULL) {
+        qemu_bh_schedule(s->handle_messages_bh);
     }
 }
 
@@ -404,7 +405,8 @@ AppleA7IOPMailbox *apple_a7iop_mailbox_new(const char *role,
                                            AppleA7IOPVersion version,
                                            AppleA7IOPMailbox *iop_mailbox,
                                            AppleA7IOPMailbox *ap_mailbox,
-                                           QEMUBH *bh)
+                                           void *opaque,
+                                           QEMUBHFunc *handle_messages_func)
 {
     DeviceState *dev;
     SysBusDevice *sbd;
@@ -419,7 +421,11 @@ AppleA7IOPMailbox *apple_a7iop_mailbox_new(const char *role,
     s->role = g_strdup(role);
     s->iop_mailbox = iop_mailbox ? iop_mailbox : s;
     s->ap_mailbox = ap_mailbox ? ap_mailbox : s;
-    s->bh = bh;
+    if (handle_messages_func != NULL) {
+        s->handle_messages_bh =
+            aio_bh_new_guarded(qemu_get_aio_context(), handle_messages_func,
+                               opaque, &dev->mem_reentrancy_guard);
+    }
     QTAILQ_INIT(&s->inbox);
     QTAILQ_INIT(&s->interrupt_status);
     qemu_mutex_init(&s->lock);
