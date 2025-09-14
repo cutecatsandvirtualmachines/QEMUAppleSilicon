@@ -624,6 +624,7 @@ enum NvmeAdminCommands {
     NVME_ADM_CMD_SECURITY_SEND  = 0x81,
     NVME_ADM_CMD_SECURITY_RECV  = 0x82,
     NVME_ADM_CMD_CREATE_NS      = 0xc6,
+    NVME_ADM_CMD_MAYBE_BFH_OFW  = 0xd1,
 };
 
 enum NvmeIoCommands {

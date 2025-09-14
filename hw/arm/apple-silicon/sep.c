@@ -3573,9 +3573,6 @@ AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
     }
     sysbus_realize_and_unref(i2c, &error_fatal);
     uint64_t nvram_size = 64 * KiB;
-    if (s->chip_id >= 0x8020) {
-        nvram_size = 2 * KiB; // 0x800 bytes
-    }
 
     DriveInfo *dinfo_eeprom = drive_get_by_index(IF_PFLASH, 0);
     g_assert_nonnull(dinfo_eeprom);

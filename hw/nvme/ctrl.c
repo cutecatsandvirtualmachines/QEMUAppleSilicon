@@ -287,6 +287,9 @@ static const uint32_t nvme_cse_acs_default[256] = {
     [NVME_ADM_CMD_DIRECTIVE_SEND]   = NVME_CMD_EFF_CSUPP,
     [NVME_ADM_CMD_CREATE_NS]        = NVME_CMD_EFF_CSUPP | NVME_CMD_EFF_LBCC,
     [NVME_ADM_CMD_TUNNEL]           = NVME_CMD_EFF_CSUPP,
+    [NVME_ADM_CMD_MAYBE_BFH_OFW]    = NVME_CMD_EFF_CSUPP,
+    [NVME_ADM_CMD_DOWNLOAD_FW]      = NVME_CMD_EFF_CSUPP,
+    [NVME_ADM_CMD_ACTIVATE_FW]      = NVME_CMD_EFF_CSUPP,
 };
 
 static const uint32_t nvme_cse_iocs_nvm_default[256] = {
@@ -6384,13 +6387,22 @@ static uint16_t nvme_get_feature(NvmeCtrl *n, NvmeRequest *req)
     case NVME_TIMESTAMP:
         return nvme_get_feature_timestamp(n, req);
     case NVME_NAND_INFO_LOW:
-        result = 0xffffff;
+        //result = 0xffffff; // original (t302), Invalid-FW-File.pak
+        result = 0x0800A117; // t302
+        //result = 0x201931B; // S3E
         goto out;
     case NVME_NAND_INFO_HIGH:
-        result = 0;
+        //result = 0; // original (t302), and S3E
+        result = 0x00000001; // t302
         goto out;
     case NVME_MSP_TYPE:
-        result = 2;
+        // -1 == S3E, 0 == S4E, 1 == M9, 2 == t302, 3 == Turks, 4 == t8310,
+        // 5 == t303, others Unknown MSP type: 0x...
+        result = 2; // original, t302
+        //result = -1; // S3E
+        // using S3E with a real id might trigger some error case in combination
+        // with NVME_ADM_CMD_MAYBE_BFH_OFW, but not with t302, which also uses
+        // it.
         goto out;
     case NVME_HOST_BEHAVIOR_SUPPORT:
         return nvme_c2h(n, (uint8_t *)&n->features.hbs,
@@ -7190,6 +7202,21 @@ static uint16_t nvme_tunnel(NvmeCtrl *n, NvmeRequest *req)
     return NVME_SUCCESS;
 }
 
+static uint16_t nvme_maybe_bfh_ofw(NvmeCtrl *n, NvmeRequest *req)
+{
+    return NVME_SUCCESS;
+}
+
+static uint16_t nvme_download_fw(NvmeCtrl *n, NvmeRequest *req)
+{
+    return NVME_SUCCESS;
+}
+
+static uint16_t nvme_activate_fw(NvmeCtrl *n, NvmeRequest *req)
+{
+    return NVME_SUCCESS;
+}
+
 static void nvme_get_virt_res_num(NvmeCtrl *n, uint8_t rt, int *num_total,
                                   int *num_prim, int *num_sec)
 {
@@ -7520,6 +7547,12 @@ static uint16_t nvme_admin_cmd(NvmeCtrl *n, NvmeRequest *req)
         return nvme_directive_receive(n, req);
     case NVME_ADM_CMD_CREATE_NS:
         return nvme_create_ns(n, req);
+    case NVME_ADM_CMD_MAYBE_BFH_OFW:
+        return nvme_maybe_bfh_ofw(n, req);
+    case NVME_ADM_CMD_DOWNLOAD_FW:
+        return nvme_download_fw(n, req);
+    case NVME_ADM_CMD_ACTIVATE_FW:
+        return nvme_activate_fw(n, req);
     default:
         g_assert_not_reached();
     }
