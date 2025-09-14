@@ -524,7 +524,7 @@ static void apple_mt_spi_push_report_hdr(AppleMTSPIBuffer *buf, uint8_t type,
                                          uint16_t payload_length)
 {
     apple_mt_spi_push_hid_hdr(buf, type, report_id, packet_status, frame_number,
-                              0, payload_length + sizeof(uint8_t));
+                              0, payload_length + sizeof(report_id));
     apple_mt_spi_buf_push_byte(buf, report_id);
 }
 
@@ -534,7 +534,7 @@ static void apple_mt_spi_push_report_byte(AppleMTSPIBuffer *buf, uint8_t type,
                                           uint8_t frame_number, uint8_t val)
 {
     apple_mt_spi_push_report_hdr(buf, type, report_id, packet_status,
-                                 frame_number, sizeof(uint8_t) * 2);
+                                 frame_number, sizeof(val));
     apple_mt_spi_buf_push_byte(buf, val);
 }
 
