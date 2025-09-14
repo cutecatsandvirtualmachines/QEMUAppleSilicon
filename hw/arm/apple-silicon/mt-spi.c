@@ -331,6 +331,7 @@ static void apple_mt_spi_reset_hold(Object *obj, ResetType type)
     s = APPLE_MT_SPI(obj);
 
     QEMU_LOCK_GUARD(&s->lock);
+
     apple_mt_spi_reset_unlocked(s, type);
 }
 
@@ -393,11 +394,9 @@ static void apple_mt_spi_handle_hbpp_data(AppleMTSPIState *s)
 
 static void apple_mt_spi_handle_hbpp_mem_rmw(AppleMTSPIState *s)
 {
-    if (!apple_mt_spi_buf_is_full(&s->rx)) {
-        return;
+    if (apple_mt_spi_buf_is_full(&s->rx)) {
+        apple_mt_spi_push_pending_hbpp_word(s, HBPP_PACKET_ACK_WR_REQ);
     }
-
-    apple_mt_spi_push_pending_hbpp_word(s, HBPP_PACKET_ACK_WR_REQ);
 }
 
 static void apple_mt_spi_handle_hbpp(AppleMTSPIState *s)
@@ -419,10 +418,9 @@ static void apple_mt_spi_handle_hbpp(AppleMTSPIState *s)
         }
         break;
     case HBPP_PACKET_NOP:
-        if (apple_mt_spi_buf_pos_at_start(&s->rx)) {
-            if (apple_mt_spi_buf_is_empty(&s->tx)) {
-                apple_mt_spi_buf_push_word(&s->tx, HBPP_PACKET_ACK_NOP);
-            }
+        if (apple_mt_spi_buf_pos_at_start(&s->rx) &&
+            apple_mt_spi_buf_is_empty(&s->tx)) {
+            apple_mt_spi_buf_push_word(&s->tx, HBPP_PACKET_ACK_NOP);
         }
         break;
     case HBPP_PACKET_INT_ACK:
