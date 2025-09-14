@@ -921,15 +921,15 @@ static void apple_mt_spi_mouse_event(void *opaque, int dx, int dy, int dz,
     s->prev_btn_state = s->btn_state;
     s->btn_state = buttons_state;
 
-    if (s->btn_state & MOUSE_EVENT_LBUTTON) {
-        if (!(s->prev_btn_state & MOUSE_EVENT_LBUTTON)) {
-            apple_mt_spi_schedule_touch_update(s, PATH_STAGE_MAKE_TOUCH);
+    if ((s->prev_btn_state & MOUSE_EVENT_LBUTTON) == 0 &&
+        (s->btn_state & MOUSE_EVENT_LBUTTON) != 0) {
+        apple_mt_spi_schedule_touch_update(s, PATH_STAGE_MAKE_TOUCH);
 
-            timer_del(s->end_timer);
-            timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-                                    NANOSECONDS_PER_SECOND / 10);
-        }
-    } else if (s->prev_btn_state & MOUSE_EVENT_LBUTTON) {
+        timer_del(s->end_timer);
+        timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                                NANOSECONDS_PER_SECOND / 10);
+    } else if ((s->prev_btn_state & MOUSE_EVENT_LBUTTON) != 0 &&
+               (s->btn_state & MOUSE_EVENT_LBUTTON) == 0) {
         apple_mt_spi_schedule_touch_update(s, PATH_STAGE_BREAK_TOUCH);
 
         timer_del(s->timer);
