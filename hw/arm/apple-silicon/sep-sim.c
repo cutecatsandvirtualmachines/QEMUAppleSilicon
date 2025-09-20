@@ -29,7 +29,6 @@
 #include "qemu/guest-random.h"
 #include "qemu/lockable.h"
 #include "qemu/log.h"
-#include "qemu/main-loop.h"
 #include "art.h"
 #include "libtasn1.h"
 #include "system/dma.h"
@@ -947,13 +946,10 @@ static void apple_sep_sim_handle_keystore_msg(AppleSEPSimState *s,
 
 static void apple_sep_sim_handle_messages(void *opaque)
 {
-    AppleSEPSimState *s;
-    AppleA7IOP *a7iop;
+    AppleSEPSimState *s = opaque;
+    AppleA7IOP *a7iop = opaque;
     AppleA7IOPMessage *msg;
     SEPMessage *sep_msg;
-
-    s = APPLE_SEP_SIM(opaque);
-    a7iop = APPLE_A7IOP(opaque);
 
     QEMU_LOCK_GUARD(&s->lock);
 
