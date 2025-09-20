@@ -945,7 +945,7 @@ static void apple_sep_sim_handle_keystore_msg(AppleSEPSimState *s,
     g_free(msg_buf);
 }
 
-static void apple_sep_sim_bh(void *opaque)
+static void apple_sep_sim_handle_messages(void *opaque)
 {
     AppleSEPSimState *s;
     AppleA7IOP *a7iop;
@@ -1025,7 +1025,7 @@ AppleSEPSimState *apple_sep_sim_from_node(AppleDTNode *node, bool modern)
 
     apple_a7iop_init(a7iop, "SEP", reg[1],
                      modern ? APPLE_A7IOP_V4 : APPLE_A7IOP_V2, NULL,
-                     qemu_bh_new(apple_sep_sim_bh, s));
+                     apple_sep_sim_handle_messages);
 
     qemu_mutex_init(&s->lock);
 
@@ -1042,6 +1042,7 @@ static void apple_sep_sim_realize(DeviceState *dev, Error **errp)
 
     s = APPLE_SEP_SIM(dev);
     sc = APPLE_SEP_SIM_GET_CLASS(dev);
+
     if (sc->parent_realize) {
         sc->parent_realize(dev, errp);
     }
@@ -1059,6 +1060,7 @@ static void apple_sep_sim_reset_hold(Object *obj, ResetType type)
     s = APPLE_SEP_SIM(obj);
     sc = APPLE_SEP_SIM_GET_CLASS(obj);
     a7iop = APPLE_A7IOP(obj);
+
     if (sc->parent_phases.hold != NULL) {
         sc->parent_phases.hold(obj, type);
     }
