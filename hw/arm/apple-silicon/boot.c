@@ -32,7 +32,7 @@
 #include "lzss.h"
 #include "system/memory.h"
 
-#if 1
+#if 0
 #define DINFO(fmt, ...) info_report(fmt, ##__VA_ARGS__)
 #else
 #define DINFO(fmt, ...) \
