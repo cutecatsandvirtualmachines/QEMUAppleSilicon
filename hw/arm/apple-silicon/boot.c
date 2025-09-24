@@ -1050,6 +1050,44 @@ const char *apple_boot_platform_string(MachoHeader64 *header)
         return "watchOS";
     case PLATFORM_BRIDGEOS:
         return "bridgeOS";
+    case PLATFORM_MAC_CATALYST:
+        return "Mac Catalyst";
+    case PLATFORM_IOS_SIMULATOR:
+        return "iOS Simulator";
+    case PLATFORM_TVOS_SIMULATOR:
+        return "tvOS Simulator";
+    case PLATFORM_WATCHOS_SIMULATOR:
+        return "watchOS Simulator";
+    case PLATFORM_DRIVERKIT:
+        return "DriverKit";
+    case PLATFORM_VISIONOS:
+        return "visionOS";
+    case PLATFORM_VISIONOS_SIMULATOR:
+        return "visionOS Simulator";
+    case PLATFORM_FIRMWARE:
+        return "Firmware";
+    case PLATFORM_SEPOS:
+        return "sepOS";
+    case PLATFORM_MACOS_EXCLAVECORE:
+        return "macOS ExclaveCore";
+    case PLATFORM_MACOS_EXCLAVEKIT:
+        return "macOS ExclaveKit";
+    case PLATFORM_IOS_EXCLAVECORE:
+        return "iOS ExclaveCore";
+    case PLATFORM_IOS_EXCLAVEKIT:
+        return "iOS ExclaveKit";
+    case PLATFORM_TVOS_EXCLAVECORE:
+        return "tvOS ExclaveCore";
+    case PLATFORM_TVOS_EXCLAVEKIT:
+        return "tvOS ExclaveKit";
+    case PLATFORM_WATCHOS_EXCLAVECORE:
+        return "watchOS ExclaveCore";
+    case PLATFORM_WATCHOS_EXCLAVEKIT:
+        return "watchOS ExclaveKit";
+    case PLATFORM_VISIONOS_EXCLAVECORE:
+        return "visionOS ExclaveCore";
+    case PLATFORM_VISIONOS_EXCLAVEKIT:
+        return "visionOS ExclaveKit";
     default:
         return "Unknown";
     }
