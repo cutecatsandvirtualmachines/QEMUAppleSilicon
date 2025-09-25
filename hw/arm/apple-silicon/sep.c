@@ -3060,6 +3060,9 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
         if (data == 0xF2E31133) {
             apple_sep_send_message(s, 0xFF, 0x67, 3, 0x00, 0x00);
             DPRINTF("SEP Progress: Sent fake GenerateNonce\n");
+            // we have no damn idea what this opcode is, but if tz0
+            // isn't large enough compared to the value derived from this data
+            // it whines. this value is for t8030, straight from the decompiler.
             apple_sep_send_message(s, 0xFF, 0x0, 17, 0x00, 0x8000);
             DPRINTF("SEP Progress: Sent fake Opcode17\n");
         } else if ((data == 0xFC4A2CAC || data == 0xEEE6BA79) &&
