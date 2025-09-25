@@ -321,6 +321,8 @@ typedef struct {
     uint64_t trustcache_size;
     hwaddr sep_fw_addr;
     uint64_t sep_fw_size;
+    hwaddr tz0_addr;
+    uint64_t tz0_size;
     hwaddr kern_boot_args_addr;
     uint64_t kern_boot_args_size;
     hwaddr top_of_kernel_data_pa;

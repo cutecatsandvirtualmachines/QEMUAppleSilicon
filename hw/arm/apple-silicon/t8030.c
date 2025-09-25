@@ -144,10 +144,49 @@
 #define AMCC_SIZE (0x100000)
 #define AMCC_PLANE_COUNT (4)
 #define AMCC_PLANE_STRIDE (0x40000)
-#define AMCC_LOWER(_p) (0x680 + (_p) * AMCC_PLANE_STRIDE)
-#define AMCC_UPPER(_p) (0x684 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_BLK_MCC_CHANNEL_DEC(_p) (0x4 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_BLK_HASH0_LO(_p) (0x8 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_BLK_HASH0_HI(_p) (0xC + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_BLK_HASH1_LO(_p) (0x10 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_BLK_HASH1_HI(_p) (0x14 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_LOWER_LIMIT(_p) (0x680 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_UPPER_LIMIT(_p) (0x684 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_ENABLED(_p) (0x688 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_LOCK(_p) (0x68C + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_TZ0_BASE(_p) (0x6A0 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_TZ0_END(_p) (0x6A4 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_TZ0_LOCK(_p) (0x6A8 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_MUI_MCS_ADDR_BANK_HASH0(_p) \
+    (0x1004 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_MUI_MCS_ADDR_BANK_HASH1(_p) \
+    (0x1008 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_MUI_MCS_ADDR_BANK_HASH2(_p) \
+    (0x100C + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_MUI_BLK_ADDR_MAP_MODE(_p) (0x1010 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_MUI_BLK_ADDR_CFG(_p) (0x1014 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_MUI_BLK_NUM_MCU_CHANNEL(_p) \
+    (0x1020 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_CACHE_STATUS(_p) (0x1C00 + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_PLANE_BROADCAST(_p) (0x1000C + (_p) * AMCC_PLANE_STRIDE)
+#define AMCC_RREG32(_machine, _off) ldl_le_p(&_machine->amcc_reg[_off])
 #define AMCC_WREG32(_machine, _off, _val) \
     stl_le_p(&_machine->amcc_reg[_off], _val)
+#define AMCC_NON_PLANE_GFX (AMCC_BASE + AMCC_PLANE_COUNT * AMCC_PLANE_STRIDE)
+#define AMCC_NON_PLANE_GFX_TAG_RAM_BANK_HASH0 (0x80)
+#define AMCC_NON_PLANE_GFX_TAG_RAM_BANK_HASH1 (0x84)
+#define AMCC_NON_PLANE_GFX_ADDR_HASH0_LO (0x100)
+#define AMCC_NON_PLANE_GFX_ADDR_HASH0_HI (0x104)
+#define AMCC_NON_PLANE_GFX_ADDR_HASH1_LO (0x108)
+#define AMCC_NON_PLANE_GFX_ADDR_HASH1_HI (0x10C)
+#define AMCC_NON_PLANE_GFX_ADDR_NUM_MCU_CHANNEL (0x118)
+#define AMCC_NON_PLANE (AMCC_NON_PLANE_GFX + AMCC_PLANE_STRIDE)
+#define AMCC_NON_PLANE_TAG_RAM_BANK_HASH0 (0x80)
+#define AMCC_NON_PLANE_TAG_RAM_BANK_HASH1 (0x84)
+#define AMCC_NON_PLANE_ADDR_HASH0_LO (0x180)
+#define AMCC_NON_PLANE_ADDR_HASH0_HI (0x184)
+#define AMCC_NON_PLANE_ADDR_HASH1_LO (0x188)
+#define AMCC_NON_PLANE_ADDR_HASH1_HI (0x18C)
+#define AMCC_NON_PLANE_ADDR_NUM_MCU_CHANNEL (0x198)
 
 #define FUSE_ENABLED (0xA55AC33C)
 #define FUSE_DISABLED (0xA050C030)
@@ -271,8 +310,6 @@ static void t8030_load_kernelcache(AppleT8030MachineState *t8030,
     hwaddr apple_dt_va;
     hwaddr mem_size;
     hwaddr phys_ptr;
-    hwaddr amcc_lower;
-    hwaddr amcc_upper;
     AppleBootInfo *info = &t8030->boot_info;
     hwaddr text_base;
 
@@ -312,28 +349,26 @@ static void t8030_load_kernelcache(AppleT8030MachineState *t8030,
         phys_ptr += info->ramdisk_size;
     }
 
+    // TZ0
+    info->tz0_addr = phys_ptr;
+    info->tz0_size = 300 * MiB;
+    phys_ptr += info->tz0_size;
+
     // SEP Firmware
     info->sep_fw_addr = phys_ptr;
+    info->sep_fw_size = 16 * MiB;
+    phys_ptr += info->sep_fw_size;
+
     if (t8030->sep_fw_filename != NULL) {
-        apple_boot_load_raw_file(t8030->sep_fw_filename, &address_space_memory,
-                                 get_system_memory(), info->sep_fw_addr,
-                                 &info->sep_fw_size);
         AppleSEPState *sep = APPLE_SEP(
             object_property_get_link(OBJECT(t8030), "sep", &error_fatal));
         sep->sep_fw_addr = info->sep_fw_addr;
-        sep->sep_fw_size = info->sep_fw_size;
-        g_file_get_contents(t8030->sep_fw_filename, &sep->sepfw_data, NULL,
-                            NULL);
-    }
-
-    info->sep_fw_size = SEPFW_MAPPING_SIZE;
-    phys_ptr += info->sep_fw_size;
-
-    amcc_lower = info->sep_fw_addr;
-    amcc_upper = amcc_lower + info->sep_fw_size - 1;
-    for (int i = 0; i < 4; i++) {
-        AMCC_WREG32(t8030, AMCC_LOWER(i), (amcc_lower - DRAM_BASE) >> 14);
-        AMCC_WREG32(t8030, AMCC_UPPER(i), (amcc_upper - DRAM_BASE) >> 14);
+        if (!g_file_get_contents(t8030->sep_fw_filename, &sep->fw_data,
+                                 &sep->sep_fw_size, NULL)) {
+            error_setg(&error_fatal, "Failed to read SEP Firmware from `%s`",
+                       t8030->sep_fw_filename);
+            return;
+        }
     }
 
     // Kernel boot args
@@ -626,6 +661,23 @@ static void t8030_memory_setup(AppleT8030MachineState *t8030)
     }
 
     g_free(cmdline);
+
+    for (int i = 0; i < AMCC_PLANE_COUNT; i++) {
+        AMCC_WREG32(t8030, AMCC_PLANE_LOWER_LIMIT(i),
+                    (info->trustcache_addr - info->dram_base) >> 14);
+        AMCC_WREG32(t8030, AMCC_PLANE_UPPER_LIMIT(i),
+                    ((info->trustcache_addr + info->trustcache_size - 1) -
+                     info->dram_base) >>
+                        14);
+        AMCC_WREG32(t8030, AMCC_PLANE_LOCK(i), 1);
+        AMCC_WREG32(t8030, AMCC_PLANE_TZ0_BASE(i),
+                    (info->tz0_addr - info->dram_base) >> 12);
+        AMCC_WREG32(t8030, AMCC_PLANE_TZ0_END(i),
+                    ((info->tz0_addr + info->tz0_size - 1) - info->dram_base) >>
+                        12);
+        AMCC_WREG32(t8030, AMCC_PLANE_TZ0_LOCK(i), 1);
+        AMCC_WREG32(t8030, AMCC_PLANE_BLK_MCC_CHANNEL_DEC(i), 0x2F);
+    }
 }
 
 static uint64_t pmgr_unk_e4800 = 0;
@@ -823,53 +875,31 @@ static void amcc_reg_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
     AppleT8030MachineState *t8030 = opaque;
-    uint32_t value = data;
 
-    memcpy(t8030->amcc_reg + addr, &value, size);
+    if ((AMCC_RREG32(t8030, AMCC_PLANE_LOCK(addr / AMCC_PLANE_STRIDE)) != 0 &&
+         (addr % AMCC_PLANE_STRIDE == AMCC_PLANE_LOWER_LIMIT(0) ||
+          addr % AMCC_PLANE_STRIDE == AMCC_PLANE_UPPER_LIMIT(0) ||
+          addr % AMCC_PLANE_STRIDE == AMCC_PLANE_LOCK(0))) ||
+        (AMCC_RREG32(t8030, AMCC_PLANE_TZ0_LOCK(addr / AMCC_PLANE_STRIDE)) !=
+             0 &&
+         (addr % AMCC_PLANE_STRIDE == AMCC_PLANE_TZ0_BASE(0) ||
+          addr % AMCC_PLANE_STRIDE == AMCC_PLANE_TZ0_END(0) ||
+          addr % AMCC_PLANE_STRIDE == AMCC_PLANE_TZ0_LOCK(0)))) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: attempted write to locked register 0x" HWADDR_FMT_plx
+                      "\n",
+                      __func__, addr);
+        return;
+    }
+
+    memcpy(t8030->amcc_reg + addr, &data, size);
 }
 
 static uint64_t amcc_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     AppleT8030MachineState *t8030 = opaque;
     uint64_t result = 0;
-    uint64_t base = t8030->boot_info.top_of_kernel_data_pa - DRAM_BASE;
-    uint64_t amcc_size = 0xf000000;
-    switch (addr) {
-    case 0x6A0:
-    case 0x406A0:
-    case 0x806A0:
-    case 0xC06A0:
-        result = base >> 12;
-        break;
-    case 0x6A4:
-    case 0x406A4:
-    case 0x806A4:
-    case 0xC06A4:
-        result = ((amcc_size + base) - 1) >> 12;
-        break;
-    case 0x6A8:
-    case 0x406A8:
-    case 0x806A8:
-    case 0xC06A8:
-        result = 0x1;
-        break;
-    case 0x6B8:
-    case 0x406B8:
-    case 0x806B8:
-    case 0xC06B8:
-        result = 0x1;
-        break;
-    case 0x4:
-    case 0x40004:
-    case 0x80004:
-    case 0xc0004:
-        result = 0x2f;
-        break;
-    default: {
-        memcpy(&result, t8030->amcc_reg + addr, size);
-        break;
-    }
-    }
+    memcpy(&result, t8030->amcc_reg + addr, size);
 #if 0
     qemu_log_mask(LOG_UNIMP,
                   "AMCC reg READ @ 0x" TARGET_FMT_lx " value: 0x" TARGET_FMT_lx
@@ -1089,11 +1119,13 @@ static void t8030_amcc_setup(AppleT8030MachineState *t8030)
     g_assert_nonnull(child);
 
     apple_dt_set_prop_u32(child, "aperture-count", 1);
-    apple_dt_set_prop_u32(child, "aperture-size", 0x100000);
+    apple_dt_set_prop_u32(child, "aperture-size",
+                          AMCC_PLANE_COUNT * AMCC_PLANE_STRIDE);
     apple_dt_set_prop_u32(child, "plane-count", AMCC_PLANE_COUNT);
     apple_dt_set_prop_u32(child, "plane-stride", AMCC_PLANE_STRIDE);
     apple_dt_set_prop_u64(child, "aperture-phys-addr", AMCC_BASE);
-    apple_dt_set_prop_u32(child, "cache-status-reg-offset", 0x1C00);
+    apple_dt_set_prop_u32(child, "cache-status-reg-offset",
+                          AMCC_PLANE_CACHE_STATUS(0));
     apple_dt_set_prop_u32(child, "cache-status-reg-mask", 0x1F);
     apple_dt_set_prop_u32(child, "cache-status-reg-value", 0);
 
@@ -1101,11 +1133,13 @@ static void t8030_amcc_setup(AppleT8030MachineState *t8030)
     g_assert_nonnull(child);
 
     apple_dt_set_prop_u32(child, "page-size-shift", 14);
-    apple_dt_set_prop_u32(child, "lower-limit-reg-offset", AMCC_LOWER(0));
+    apple_dt_set_prop_u32(child, "lower-limit-reg-offset",
+                          AMCC_PLANE_LOWER_LIMIT(0));
     apple_dt_set_prop_u32(child, "lower-limit-reg-mask", 0xFFFFFFFF);
-    apple_dt_set_prop_u32(child, "upper-limit-reg-offset", AMCC_UPPER(0));
+    apple_dt_set_prop_u32(child, "upper-limit-reg-offset",
+                          AMCC_PLANE_UPPER_LIMIT(0));
     apple_dt_set_prop_u32(child, "upper-limit-reg-mask", 0xFFFFFFFF);
-    apple_dt_set_prop_u32(child, "lock-reg-offset", 0x68C);
+    apple_dt_set_prop_u32(child, "lock-reg-offset", AMCC_PLANE_LOCK(0));
     apple_dt_set_prop_u32(child, "lock-reg-mask", 1);
     apple_dt_set_prop_u32(child, "lock-reg-value", 1);
 

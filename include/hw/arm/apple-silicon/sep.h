@@ -43,7 +43,6 @@ DECLARE_INSTANCE_CHECKER(AppleSSCState, APPLE_SSC, TYPE_APPLE_SSC)
 
 #define DEBUG_TRACE_SIZE (0x10000)
 
-// Some SEPFW versions can be a tad larger than 8 MiB
 #define SEPFW_MAPPING_SIZE (16 * MiB)
 #define SEP_DMA_MAPPING_SIZE (SEPFW_MAPPING_SIZE * 2)
 #define SEP_SHMBUF_BASE (SEPFW_MAPPING_SIZE + 0xC000)
@@ -296,12 +295,12 @@ struct AppleSEPState {
     I2CSlave *nvram;
     AppleSSCState *ssc_state;
     hwaddr sep_fw_addr;
-    uint64_t sep_fw_size;
+    gsize sep_fw_size;
     uint32_t chip_id;
     hwaddr shmbuf_base;
     hwaddr trace_buffer_base_offset;
     hwaddr debug_trace_size;
-    gchar *sepfw_data;
+    gchar *fw_data;
     bool pmgr_fuse_changer_bit0_was_set;
     bool pmgr_fuse_changer_bit1_was_set;
     uint8_t key_fcfg_offset_0x14_index;

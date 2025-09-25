@@ -3055,35 +3055,15 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
 #endif
     switch (addr) {
     case 0x4:
-        if (data ==
-            0xF2E31133) // iBoot would send those requests. iOS warns about the
-                        // responses, because it doesn't expect them.
-        {
-            sep_msg.ep = 0xFF;
-
-            sep_msg.op = 3; // kOpCode_GenerateNonce
-            sep_msg.tag = 0x67;
-            ////sep_msg.opcode = 4; // kOpCode_ReportNonceWord
-            // memcpy(msg0->data, sep_msg, 16);
-            // apple_mbox_inbox_push(s->mbox, msg0);
-            // IOP_LOG_MSG(s->mbox, "SEP MISC4: Sent fake
-            // SEPROM_Opcode3/kOpCode_GenerateNonce", msg0);
-            // apple_mbox_send_inbox_control_message(s->mbox, 0, sep_msg.raw);
+        // iBoot would send those requests. iOS warns about the
+        // responses, because it doesn't expect them.
+        if (data == 0xF2E31133) {
             apple_sep_send_message(s, 0xFF, 0x67, 3, 0x00, 0x00);
-            DPRINTF("SEP Progress: Sent fake "
-                    "SEPROM_Opcode3/kOpCode_GenerateNonce\n");
-
-
-            sep_msg.op = 17; // Opcode 17
-            sep_msg.tag = 0x0;
-            sep_msg.data = 0x8000; // SEPFW on iOS 14.0/14.4.2 for T8020, if I
-                                   // found the correct data in Ghidra.
-            // apple_mbox_send_inbox_control_message(s->mbox, 0, sep_msg.raw);
+            DPRINTF("SEP Progress: Sent fake GenerateNonce\n");
             apple_sep_send_message(s, 0xFF, 0x0, 17, 0x00, 0x8000);
-            DPRINTF("SEP MISC4: Sent fake SEPROM_Opcode17\n");
-        }
-        if ((data == 0xFC4A2CAC || data == 0xEEE6BA79) &&
-            (s->chip_id >= 0x8020)) // Enable Trace Buffer
+            DPRINTF("SEP Progress: Sent fake Opcode17\n");
+        } else if ((data == 0xFC4A2CAC || data == 0xEEE6BA79) &&
+                   (s->chip_id >= 0x8020)) // Enable Trace Buffer
         {
             // Only works for >= T8020, because the T8015 SEPOS is compressed.
 #ifdef SEP_ENABLE_TRACE_BUFFER
@@ -3097,7 +3077,6 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
             hwaddr phys_addr = 0x0;
             // easy way of retrieving the sepb random_0 address
             // T8020: b *0x340000000 ; p/x $x0+0x80 == e.g. 0x340736380
-            // easy way of retrieving the sepb random_0 address
             // T8030: go to the first SYS_ACC_PWR_DN_SAVE read in the kernel,
             // and then do p/x $x0+0x80 == e.g. 0x3407CA380
             if (s->chip_id == 0x8015) {
@@ -3139,7 +3118,7 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
             AddressSpace *nsas = &address_space_memory;
 #ifdef SEP_ENABLE_HARDCODED_FIRMWARE
             address_space_write(nsas, s->sep_fw_addr, MEMTXATTRS_UNSPECIFIED,
-                                s->sepfw_data, s->sep_fw_size);
+                                s->fw_data, s->sep_fw_size);
 #endif
             // g_free(sep_fw);
         }
@@ -3606,11 +3585,6 @@ AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
     g_assert_nonnull(s->ool_as);
     address_space_init(s->ool_as, s->ool_mr, "sep.ool");
 #endif
-#if 0
-    if (s->chip_id >= 0x8020) {
-        create_unimplemented_device("sep_unimp0", 0x242140000, 0x4000);
-    }
-#endif
 
     return s;
 }
@@ -3702,7 +3676,7 @@ static void map_sepfw(AppleSEPState *s)
     address_space_set(nsas, 0x0, 0, SEPFW_MAPPING_SIZE, MEMTXATTRS_UNSPECIFIED);
 #ifdef SEP_ENABLE_HARDCODED_FIRMWARE
     address_space_rw(nsas, 0x4000ULL, MEMTXATTRS_UNSPECIFIED,
-                     (uint8_t *)s->sepfw_data, s->sep_fw_size, true);
+                     (uint8_t *)s->fw_data, s->sep_fw_size, true);
 #endif
 }
 

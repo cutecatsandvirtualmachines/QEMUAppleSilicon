@@ -304,7 +304,7 @@ static void s8000_load_kernelcache(AppleS8000MachineState *s8000,
     // Device tree
     info->device_tree_addr = phys_ptr;
     apple_dt_va = ptov_static(info->device_tree_addr);
-    phys_ptr += info->device_tree_size;
+    phys_ptr += ROUND_UP_16K(info->device_tree_size);
 
     // RAM disk
     if (machine->initrd_filename) {
@@ -316,12 +316,12 @@ static void s8000_load_kernelcache(AppleS8000MachineState *s8000,
         phys_ptr += info->ramdisk_size;
     }
 
+    phys_ptr = ROUND_UP_16K(phys_ptr);
     info->sep_fw_addr = phys_ptr;
     if (s8000->sep_fw_filename) {
-        apple_boot_load_raw_file(s8000->sep_fw_filename, &address_space_memory,
-                                 sysmem, info->sep_fw_addr, &info->sep_fw_size);
+        // TODO
     }
-    info->sep_fw_size = ROUND_UP_16K(8 * MiB);
+    info->sep_fw_size = 8 * MiB;
     phys_ptr += info->sep_fw_size;
 
     // Kernel boot args
