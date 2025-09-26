@@ -22,9 +22,7 @@
 #include "hw/i2c/i2c.h"
 #include "migration/vmstate.h"
 
-// #define DEBUG_CS35L27
-
-#ifdef DEBUG_CS35L27
+#if 0
 #define DPRINTF(v, ...) fprintf(stderr, v, ##__VA_ARGS__)
 #else
 #define DPRINTF(v, ...) \
