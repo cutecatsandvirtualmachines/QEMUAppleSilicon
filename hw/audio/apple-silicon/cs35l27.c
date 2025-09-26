@@ -42,7 +42,18 @@ struct AppleCS35L27State {
     uint8_t regs[CS35L27_REG_SIZE];
 };
 
+#define DEVID_SFT_RESET_DEVICE_ID_REG (0x0)
+#define VPBR_PAC_INT_INT_REGISTER_1 (0x2810)
+#define VPBR_PAC_INT_INT_REGISTER_2 (0x2814)
+#define VPBR_PAC_INT_INT_REGISTER_3 (0x2818)
+#define VPBR_PAC_INT_INT_REGISTER_4 (0x281C)
+#define VPBR_PAC_INT_INT_REGISTER_5 (0x2820)
 #define VPBR_PAC_INT_INT_REGISTER_6 (0x2824)
+#define CLOCKING_GLOBAL_SAMPLE_RATE (0x3004)
+#define BST_CLG_SPWR_VBST_RATIO_CTL (0x3800)
+#define BST_CLG_SPWR_CLASSG_CONFIG (0x3820)
+#define BST_CLG_SPWR_CLASSG_HDRM_CONFIG (0x3824)
+#define AMP_PCM_AMP_PCM_CONTROL (0x5000)
 
 static uint8_t apple_cs35l27_rx(I2CSlave *i2c)
 {
@@ -52,17 +63,27 @@ static uint8_t apple_cs35l27_rx(I2CSlave *i2c)
     s = APPLE_CS35L27(i2c);
 
     switch (s->addr) {
-    case 0x0:
-    case 0x1:
-    case 0x2:
-    case 0x3:
-        ret = (cpu_to_be32(0x0035A270) >> (s->addr * 8)) & 0xFF;
+    case DEVID_SFT_RESET_DEVICE_ID_REG:
+    case DEVID_SFT_RESET_DEVICE_ID_REG + 1:
+    case DEVID_SFT_RESET_DEVICE_ID_REG + 2:
+    case DEVID_SFT_RESET_DEVICE_ID_REG + 3:
+        ret = (cpu_to_be32(0x0035A270) >>
+               ((s->addr - DEVID_SFT_RESET_DEVICE_ID_REG) * 8)) &
+              0xFF;
+        break;
+    case VPBR_PAC_INT_INT_REGISTER_2:
+    case VPBR_PAC_INT_INT_REGISTER_2 + 1:
+    case VPBR_PAC_INT_INT_REGISTER_2 + 2:
+    case VPBR_PAC_INT_INT_REGISTER_2 + 3:
+        ret = (cpu_to_be32(BIT(12)) >>
+               ((s->addr - VPBR_PAC_INT_INT_REGISTER_2) * 8)) &
+              0xFF;
         break;
     case VPBR_PAC_INT_INT_REGISTER_6:
     case VPBR_PAC_INT_INT_REGISTER_6 + 1:
     case VPBR_PAC_INT_INT_REGISTER_6 + 2:
     case VPBR_PAC_INT_INT_REGISTER_6 + 3:
-        ret = (cpu_to_be32(0x8000000) >>
+        ret = (cpu_to_be32(BIT(27)) >>
                ((s->addr - VPBR_PAC_INT_INT_REGISTER_6) * 8)) &
               0xFF;
         break;
