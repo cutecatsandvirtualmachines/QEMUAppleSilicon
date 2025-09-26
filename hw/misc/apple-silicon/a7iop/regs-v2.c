@@ -86,7 +86,6 @@ static uint64_t apple_a7iop_v2_reg_read(void *opaque, hwaddr addr,
                                         unsigned size)
 {
     AppleA7IOP *s = opaque;
-    uint64_t ret = 0;
 
     switch (addr) {
     case REG_CPU_CTRL:
@@ -97,10 +96,8 @@ static uint64_t apple_a7iop_v2_reg_read(void *opaque, hwaddr addr,
         qemu_log_mask(LOG_UNIMP,
                       "A7IOP(%s): Unknown read from 0x" HWADDR_FMT_plx "\n",
                       s->role, addr);
-        break;
+        return 0;
     }
-
-    return ret;
 }
 
 static const MemoryRegionOps apple_a7iop_v2_reg_ops = {

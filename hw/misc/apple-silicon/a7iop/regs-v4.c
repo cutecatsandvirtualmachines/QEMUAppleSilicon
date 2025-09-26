@@ -102,12 +102,13 @@ static void apple_a7iop_v4_reg_write(void *opaque, hwaddr addr,
         break;
     case REG_KIC_MAILBOX_EXT_CLR:
         break;
-    default:
+    default: {
         qemu_log_mask(LOG_UNIMP,
                       "A7IOP(%s): Unknown write to 0x" HWADDR_FMT_plx
                       " of value 0x" HWADDR_FMT_plx "\n",
                       s->role, addr, data);
         break;
+    }
     }
 }
 
@@ -115,7 +116,6 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
                                         unsigned size)
 {
     AppleA7IOP *s = opaque;
-    uint64_t ret = 0;
 
     switch (addr) {
     case REG_CPU_CTRL:
@@ -123,10 +123,9 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
     case REG_CPU_STATUS:
         return apple_a7iop_get_cpu_status(s);
     case REG_UNKNOWN_4C:
-        ret = 1;
         // TODO: response not interrupt available, but something with
         // REG_V3_CPU_CTRL?
-        break;
+        return 1;
     case REG_INTERRUPT_STATUS: {
         AppleA7IOPMailbox *a7iop_mbox = s->iop_mailbox;
         uint32_t interrupt_status =
@@ -135,29 +134,27 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
         {
             apple_a7iop_mailbox_update_irq_status(a7iop_mbox);
             if (interrupt_status) {
-                ret = interrupt_status;
+                return interrupt_status;
             } else if (a7iop_mbox->iop_nonempty) {
-                ret = 0x40000;
+                return 0x40000;
             } else if (a7iop_mbox->iop_empty) {
-                ret = 0x40001;
+                return 0x40001;
             } else if (a7iop_mbox->ap_nonempty) {
-                ret = 0x40002;
+                return 0x40002;
             } else if (a7iop_mbox->ap_empty) {
-                ret = 0x40003;
+                return 0x40003;
             } else {
-                ret = 0x70001;
+                return 0x70001;
             }
         }
-        break;
     }
-    default:
+    default: {
         qemu_log_mask(LOG_UNIMP,
                       "A7IOP(%s): Unknown read from 0x" HWADDR_FMT_plx "\n",
                       s->role, addr);
-        break;
+        return 0;
     }
-
-    return ret;
+    }
 }
 
 static const MemoryRegionOps apple_a7iop_v4_reg_ops = {
