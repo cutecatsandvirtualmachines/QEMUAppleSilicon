@@ -25,9 +25,7 @@
 #include "qemu/bswap.h"
 #include "qemu/lockable.h"
 
-// #define DEBUG_CS42L77
-
-#ifdef DEBUG_CS42L77
+#if 0
 #define DPRINTF(v, ...) fprintf(stderr, v, ##__VA_ARGS__)
 #else
 #define DPRINTF(v, ...) \
