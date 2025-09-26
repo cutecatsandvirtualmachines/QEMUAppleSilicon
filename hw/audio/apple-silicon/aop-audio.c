@@ -20,9 +20,7 @@
 #include "hw/audio/apple-silicon/aop-audio.h"
 #include "hw/misc/apple-silicon/aop.h"
 
-// #define DEBUG_AOP_AUDIO
-
-#ifdef DEBUG_AOP_AUDIO
+#if 0
 #define DPRINTF(v, ...) fprintf(stderr, v, ##__VA_ARGS__)
 #else
 #define DPRINTF(v, ...) \
