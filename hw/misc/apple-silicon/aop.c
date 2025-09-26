@@ -25,9 +25,7 @@
 #include "qemu/log.h"
 #include "system/dma.h"
 
-// #define DEBUG_AOP
-
-#ifdef DEBUG_AOP
+#if 0
 #include "qemu/cutils.h"
 
 #define DHEXDUMP(a, b, c) qemu_hexdump(stderr, a, b, c)
