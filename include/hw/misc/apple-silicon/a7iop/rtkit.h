@@ -45,8 +45,8 @@ typedef union {
     uint64_t raw;
     union {
         struct {
-            uint16_t major;
-            uint16_t minor;
+            uint16_t minVersion;
+            uint16_t maxVersion;
         } hello;
         struct {
             uint32_t seg;

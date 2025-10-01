@@ -306,8 +306,8 @@ static void apple_rtkit_mgmt_send_hello(AppleRTKit *s)
     trace_apple_rtkit_mgmt_send_hello(APPLE_A7IOP(s)->role);
 
     msg.type = MSG_HELLO;
-    msg.hello.major = s->protocol_version;
-    msg.hello.minor = s->protocol_version;
+    msg.hello.minVersion = s->protocol_version;
+    msg.hello.maxVersion = s->protocol_version;
     s->ep0_status = EP0_WAIT_HELLO;
 
     apple_rtkit_send_control_msg(s, EP_MANAGEMENT, msg.raw);
