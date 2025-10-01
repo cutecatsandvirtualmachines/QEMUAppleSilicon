@@ -67,6 +67,14 @@
     } while (0)
 #endif
 
+typedef struct {
+    uint8_t ep;
+    uint8_t tag;
+    uint8_t op;
+    uint8_t param;
+    uint32_t data;
+} QEMU_PACKED SEPMessage;
+
 // #define ENABLE_CPU_DUMP_STATE
 
 #define SEP_ENABLE_HARDCODED_FIRMWARE

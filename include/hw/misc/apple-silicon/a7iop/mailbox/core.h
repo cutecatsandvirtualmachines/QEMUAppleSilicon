@@ -27,37 +27,6 @@ typedef struct AppleA7IOPInterruptStatusMessage {
     QTAILQ_ENTRY(AppleA7IOPInterruptStatusMessage) entry;
 } AppleA7IOPInterruptStatusMessage;
 
-typedef struct {
-    uint8_t ep;
-    uint8_t tag;
-    uint8_t op;
-    uint8_t param;
-    uint32_t data;
-} QEMU_PACKED SEPMessage;
-
-typedef struct {
-    uint8_t ep;
-    uint8_t tag;
-    uint8_t op;
-    uint8_t id;
-    uint32_t name;
-} QEMU_PACKED EPAdvertisementMessage;
-
-typedef struct {
-    uint8_t ep;
-    uint8_t tag;
-    uint16_t size;
-    uint32_t address;
-} QEMU_PACKED L4InfoMessage;
-
-typedef struct {
-    uint8_t ep;
-    uint8_t tag;
-    uint8_t op;
-    uint8_t id;
-    uint32_t data;
-} QEMU_PACKED SetOOLMessage;
-
 
 struct AppleA7IOPMailbox {
     /*< private >*/
