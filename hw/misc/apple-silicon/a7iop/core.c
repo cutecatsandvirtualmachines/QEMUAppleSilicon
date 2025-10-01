@@ -27,15 +27,18 @@ AppleA7IOPMessage *apple_a7iop_recv_iop(AppleA7IOP *s)
 
 void apple_a7iop_cpu_start(AppleA7IOP *s, bool wake)
 {
+    apple_a7iop_set_cpu_status(s, apple_a7iop_get_cpu_status(s) &
+                                      ~CPU_STATUS_IDLE);
+
     if (s->ops == NULL) {
         return;
     }
 
     if (wake) {
-        if (s->ops->wakeup) {
+        if (s->ops->wakeup != NULL) {
             s->ops->wakeup(s);
         }
-    } else if (s->ops->start) {
+    } else if (s->ops->start != NULL) {
         s->ops->start(s);
     }
 }

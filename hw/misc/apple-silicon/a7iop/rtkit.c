@@ -254,9 +254,9 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
             apple_a7iop_cpu_start(a7iop, true);
             break;
         case PSTATE_SLPNOMEM:
+            apple_a7iop_set_cpu_status(a7iop, CPU_STATUS_IDLE);
             m.type = MSG_TYPE_POWER_ACK;
             m.power.state = MSG_GET_PSTATE(msg->raw);
-            apple_a7iop_set_cpu_status(a7iop, CPU_STATUS_IDLE);
             apple_rtkit_send_msg(s, ep, m.raw);
             break;
         default:
@@ -311,9 +311,6 @@ static void apple_rtkit_iop_start(AppleA7IOP *s)
 
     trace_apple_rtkit_iop_start(s->role);
 
-    apple_a7iop_set_cpu_status(s, apple_a7iop_get_cpu_status(s) &
-                                      ~CPU_STATUS_IDLE);
-
     if (rtk->ops && rtk->ops->start) {
         rtk->ops->start(rtk->opaque);
     }
@@ -330,9 +327,6 @@ static void apple_rtkit_iop_wakeup(AppleA7IOP *s)
     rtk = APPLE_RTKIT(s);
 
     trace_apple_rtkit_iop_wakeup(s->role);
-
-    apple_a7iop_set_cpu_status(s, apple_a7iop_get_cpu_status(s) &
-                                      ~CPU_STATUS_IDLE);
 
     if (rtk->ops && rtk->ops->wakeup) {
         rtk->ops->wakeup(rtk->opaque);

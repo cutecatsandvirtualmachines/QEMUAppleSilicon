@@ -3324,9 +3324,6 @@ static void apple_sep_iop_start(AppleA7IOP *s)
 
     trace_apple_sep_iop_start(s->iop_mailbox->role);
 
-    apple_a7iop_set_cpu_status(s, apple_a7iop_get_cpu_status(s) &
-                                      ~CPU_STATUS_IDLE);
-
     hwaddr load_addr = *(hwaddr *)&sep->boot_monitor_regs[0x20];
     // Don't prevent two successive calls of this, it is actually intended,
     // once by seprom and once by sepfw.
@@ -3346,9 +3343,6 @@ static void apple_sep_iop_wakeup(AppleA7IOP *s)
     sep = APPLE_SEP(s);
 
     trace_apple_sep_iop_wakeup(s->iop_mailbox->role);
-
-    apple_a7iop_set_cpu_status(s, apple_a7iop_get_cpu_status(s) &
-                                      ~CPU_STATUS_IDLE);
 
     // TODO
     qemu_log_mask(LOG_UNIMP, "%s: unimplemented", __func__);
