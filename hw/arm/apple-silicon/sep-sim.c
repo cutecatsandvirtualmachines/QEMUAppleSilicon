@@ -1101,8 +1101,7 @@ static void apple_sep_sim_reset_hold(Object *obj, ResetType type)
     a7iop->ap_mailbox->iop_dir_en = true;
     a7iop->ap_mailbox->ap_dir_en = true;
 
-    for (i = 0; i < (sizeof(apple_sep_sim_eps) / sizeof(*apple_sep_sim_eps));
-         i++) {
+    for (i = 0; i < ARRAY_SIZE(apple_sep_sim_eps); i++) {
         switch (apple_sep_sim_eps[i]) {
         case EP_LOGGER:
             s->ool_info[apple_sep_sim_eps[i]].in_max_pages = 0;
