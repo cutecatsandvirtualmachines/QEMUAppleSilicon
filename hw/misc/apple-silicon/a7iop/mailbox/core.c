@@ -433,7 +433,10 @@ AppleA7IOPMailbox *apple_a7iop_mailbox_new(const char *role,
         sysbus_init_irq(sbd, s->irqs + i);
     }
     qdev_init_gpio_out_named(dev, &s->iop_irq, APPLE_A7IOP_IOP_IRQ, 1);
+
+    memset(name, 0, sizeof(name));
     snprintf(name, sizeof(name), TYPE_APPLE_A7IOP_MAILBOX ".%s.regs", s->role);
+
     switch (version) {
     case APPLE_A7IOP_V2:
         apple_a7iop_mailbox_init_mmio_v2(s, name);
@@ -442,6 +445,7 @@ AppleA7IOPMailbox *apple_a7iop_mailbox_new(const char *role,
         apple_a7iop_mailbox_init_mmio_v4(s, name);
         break;
     }
+
     sysbus_init_mmio(sbd, &s->mmio);
 
     return s;
@@ -456,7 +460,8 @@ static void apple_a7iop_mailbox_reset(DeviceState *dev)
 
     QEMU_LOCK_GUARD(&s->lock);
 
-    g_assert_true(s->iop_mailbox != s->ap_mailbox);
+    g_assert_false(s->iop_mailbox == s->ap_mailbox);
+
     s->count = 0;
     s->iop_dir_en = true;
     s->ap_dir_en = true;
