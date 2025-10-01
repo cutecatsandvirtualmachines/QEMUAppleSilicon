@@ -1154,7 +1154,7 @@ static void apple_sep_sim_class_init(ObjectClass *klass, const void *data)
 
     device_class_set_parent_realize(dc, apple_sep_sim_realize,
                                     &sc->parent_realize);
-    dc->desc = "Simulated Apple Secure Enclave";
+    dc->desc = "Simulated Apple Secure Enclave Processor";
     set_bit(DEVICE_CATEGORY_MISC, dc->categories);
 }
 
