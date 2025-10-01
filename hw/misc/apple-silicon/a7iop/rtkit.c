@@ -225,7 +225,7 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
                                       msg->type);
 
     switch (msg->type) {
-    case MSG_HELLO_ACK: {
+    case MSG_HELLO_ACK:
         g_assert_cmphex(s->ep0_status, ==, EP0_WAIT_HELLO);
 
         if (s->protocol_version <= 10) {
@@ -234,43 +234,36 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
             apple_rtkit_rollcall_v11(s);
         }
         break;
-    }
-    case MSG_TYPE_PING: {
+    case MSG_TYPE_PING:
         m.type = MSG_TYPE_PING_ACK;
         m.ping.seg = msg->ping.seg;
         m.ping.timestamp = msg->ping.timestamp;
         apple_rtkit_send_msg(s, ep, m.raw);
-        return;
-    }
-    case MSG_TYPE_AP_POWER: {
+        break;
+    case MSG_TYPE_AP_POWER:
         m.type = MSG_TYPE_AP_POWER;
         m.power.state = msg->power.state;
         apple_rtkit_send_msg(s, ep, m.raw);
-        return;
-    }
-    case MSG_TYPE_REQ_POWER: {
+        break;
+    case MSG_TYPE_REQ_POWER:
         g_assert_cmphex(s->ep0_status, ==, EP0_IDLE);
 
         switch (MSG_GET_PSTATE(msg->raw)) {
         case PSTATE_WAIT_VR:
-        case PSTATE_ON: {
+        case PSTATE_ON:
             apple_a7iop_cpu_start(a7iop, true);
             break;
-        }
-        case PSTATE_SLPNOMEM: {
+        case PSTATE_SLPNOMEM:
             m.type = MSG_TYPE_POWER_ACK;
             m.power.state = MSG_GET_PSTATE(msg->raw);
             apple_a7iop_set_cpu_status(a7iop, CPU_STATUS_IDLE);
             apple_rtkit_send_msg(s, ep, m.raw);
             break;
-        }
-        default: {
+        default:
             break;
         }
-        }
         break;
-    }
-    case MSG_TYPE_ROLLCALL: {
+    case MSG_TYPE_ROLLCALL:
         g_assert_cmphex(s->ep0_status, ==, EP0_WAIT_ROLLCALL);
 
         if (QTAILQ_EMPTY(&s->rollcall)) {
@@ -289,13 +282,10 @@ static void apple_rtkit_handle_mgmt_msg(void *opaque, uint32_t ep,
             apple_a7iop_send_ap(a7iop, m2);
         }
         break;
-    }
-    case MSG_TYPE_SET_EP_STATUS: {
+    case MSG_TYPE_SET_EP_STATUS:
         break;
-    }
-    default: {
+    default:
         break;
-    }
     }
 }
 
