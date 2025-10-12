@@ -7,7 +7,7 @@
 #include "hw/usb/hcd-dwc3.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_TYPEC "apple.typec"
+#define TYPE_APPLE_TYPEC "apple-typec"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleTypeCState, APPLE_TYPEC)
 
 #define ATC_USB_MMIO_SIZE (0x200000)

@@ -6,7 +6,7 @@
 #include "qemu/fifo8.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_I2C "apple.i2c"
+#define TYPE_APPLE_I2C "apple-i2c"
 OBJECT_DECLARE_TYPE(AppleI2CState, AppleHWI2CClass, APPLE_I2C)
 
 #define APPLE_I2C_MMIO_SIZE (0x10000)

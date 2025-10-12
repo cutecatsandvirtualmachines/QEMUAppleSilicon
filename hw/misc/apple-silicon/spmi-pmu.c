@@ -10,7 +10,7 @@
 #include "system/runstate.h"
 #include "system/system.h"
 
-#define TYPE_APPLE_SPMI_PMU "apple.spmi.pmu"
+#define TYPE_APPLE_SPMI_PMU "apple-spmi-pmu"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleSPMIPMUState, APPLE_SPMI_PMU)
 
 #define LEG_SCRPAD_OFFSET_SECS_OFFSET (4)

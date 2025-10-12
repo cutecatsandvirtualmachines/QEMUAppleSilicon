@@ -7,7 +7,7 @@
 #include "hw/usb/hcd-tcp.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_OTG "apple.otg"
+#define TYPE_APPLE_OTG "apple-otg"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleOTGState, APPLE_OTG)
 
 struct AppleOTGState {

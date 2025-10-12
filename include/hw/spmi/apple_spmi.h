@@ -33,7 +33,7 @@
 #include "qemu/queue.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_SPMI "apple.spmi"
+#define TYPE_APPLE_SPMI "apple-spmi"
 OBJECT_DECLARE_TYPE(AppleSPMIState, AppleSPMIClass, APPLE_SPMI)
 #define APPLE_SPMI_MMIO_SIZE (0x4000)
 

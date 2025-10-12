@@ -6,7 +6,7 @@
 #include "hw/misc/apple-silicon/a7iop/base.h"
 #include "hw/sysbus.h"
 
-#define TYPE_APPLE_SIO "apple.sio"
+#define TYPE_APPLE_SIO "apple-sio"
 OBJECT_DECLARE_TYPE(AppleSIOState, AppleSIOClass, APPLE_SIO)
 
 typedef struct AppleSIODMAEndpoint AppleSIODMAEndpoint;

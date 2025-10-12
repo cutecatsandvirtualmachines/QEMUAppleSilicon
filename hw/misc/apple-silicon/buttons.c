@@ -40,7 +40,7 @@
     } while (0)
 #endif
 
-#define TYPE_APPLE_BUTTONS "apple.buttons"
+#define TYPE_APPLE_BUTTONS "apple-buttons"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleButtonsState, APPLE_BUTTONS)
 
 struct AppleButtonsState {

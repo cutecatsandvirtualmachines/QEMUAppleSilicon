@@ -9,7 +9,7 @@
 #include "system/watchdog.h"
 #include "trace.h"
 
-#define TYPE_APPLE_WDT "apple.wdt"
+#define TYPE_APPLE_WDT "apple-wdt"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleWDTState, APPLE_WDT)
 
 #define REG_CHIP_WDOG_TMR (0x0)

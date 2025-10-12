@@ -5,7 +5,7 @@
 #include "hw/spmi/spmi.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_SPMI_BASEBAND "apple.spmi.baseband"
+#define TYPE_APPLE_SPMI_BASEBAND "apple-spmi-baseband"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleSPMIBasebandState, APPLE_SPMI_BASEBAND)
 
 struct AppleSPMIBasebandState {

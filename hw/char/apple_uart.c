@@ -138,7 +138,7 @@ typedef struct {
     uint32_t size;
 } AppleUartFIFO;
 
-#define TYPE_APPLE_UART "apple.uart"
+#define TYPE_APPLE_UART "apple-uart"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleUartState, APPLE_UART)
 
 struct AppleUartState {
@@ -546,7 +546,7 @@ static int apple_uart_post_load(void *opaque, int version_id)
 }
 
 static const VMStateDescription vmstate_apple_uart = {
-    .name = "apple.uart",
+    .name = "AppleUartState",
     .version_id = 1,
     .minimum_version_id = 1,
     .post_load = apple_uart_post_load,
@@ -590,7 +590,7 @@ static void apple_uart_init(Object *obj)
     s->wordtime = NANOSECONDS_PER_SECOND * 10 / 115200;
 
     /* memory mapping */
-    memory_region_init_io(&s->iomem, obj, &apple_uart_ops, s, "apple.uart",
+    memory_region_init_io(&s->iomem, obj, &apple_uart_ops, s, TYPE_APPLE_UART,
                           APPLE_UART_REGS_MEM_SIZE);
     sysbus_init_mmio(dev, &s->iomem);
 

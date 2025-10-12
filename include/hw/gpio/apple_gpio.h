@@ -29,7 +29,7 @@
 #include "hw/sysbus.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_GPIO "apple.gpio"
+#define TYPE_APPLE_GPIO "apple-gpio"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleGPIOState, APPLE_GPIO)
 
 struct AppleGPIOState {

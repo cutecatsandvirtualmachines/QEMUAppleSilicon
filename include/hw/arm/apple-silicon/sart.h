@@ -8,10 +8,10 @@
 
 typedef struct AppleSARTState AppleSARTState;
 
-#define TYPE_APPLE_SART "apple.sart"
+#define TYPE_APPLE_SART "apple-sart"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleSARTState, APPLE_SART)
 
-#define TYPE_APPLE_SART_IOMMU_MEMORY_REGION "apple.sart.iommu"
+#define TYPE_APPLE_SART_IOMMU_MEMORY_REGION "apple-sart-iommu"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleSARTIOMMUMemoryRegion,
                            APPLE_SART_IOMMU_MEMORY_REGION)
 

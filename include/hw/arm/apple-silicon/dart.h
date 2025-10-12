@@ -7,10 +7,10 @@
 
 typedef struct AppleDARTState AppleDARTState;
 
-#define TYPE_APPLE_DART "apple.dart"
+#define TYPE_APPLE_DART "apple-dart"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleDARTState, APPLE_DART)
 
-#define TYPE_APPLE_DART_IOMMU_MEMORY_REGION "apple.dart.iommu"
+#define TYPE_APPLE_DART_IOMMU_MEMORY_REGION "apple-dart-iommu"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleDARTIOMMUMemoryRegion,
                            APPLE_DART_IOMMU_MEMORY_REGION)
 

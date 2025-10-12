@@ -39,7 +39,7 @@
     } while (0)
 #endif
 
-#define TYPE_APPLE_ANS "apple.ans"
+#define TYPE_APPLE_ANS "apple-ans"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleANSState, APPLE_ANS)
 
 #define ANS_LOG_MSG(ep, msg)                                                 \

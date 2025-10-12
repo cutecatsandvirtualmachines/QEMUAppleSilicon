@@ -51,10 +51,10 @@
     } while (0)
 #endif
 
-#define TYPE_APPLE_BASEBAND_DEVICE "apple.baseband_device"
+#define TYPE_APPLE_BASEBAND_DEVICE "apple-baseband-device"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleBasebandDeviceState, APPLE_BASEBAND_DEVICE)
 
-#define TYPE_APPLE_BASEBAND "apple.baseband"
+#define TYPE_APPLE_BASEBAND "apple-baseband"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleBasebandState, APPLE_BASEBAND)
 
 // s8000: 0x1000/0x1000 (qualcomm)
@@ -1075,14 +1075,14 @@ static void apple_baseband_device_pci_realize(PCIDevice *dev, Error **errp)
     pci_set_word(pci_conf + PCI_SUBSYSTEM_ID, 0);
 
     memory_region_init_io(&s->bar0, OBJECT(dev), &bar0_ops, s,
-                          "apple-baseband-device-bar0",
+                          TYPE_APPLE_BASEBAND_DEVICE ".bar0",
                           APPLE_BASEBAND_DEVICE_BAR0_SIZE);
     memory_region_init_io(&s->bar1, OBJECT(dev), &bar1_ops, s,
-                          "apple-baseband-device-bar1",
+                          TYPE_APPLE_BASEBAND_DEVICE ".bar1",
                           APPLE_BASEBAND_DEVICE_BAR1_SIZE);
 #if 1
     memory_region_init_io(&s->bar2, OBJECT(dev), &bar2_ops, s,
-                          "apple-baseband-device-bar2",
+                          TYPE_APPLE_BASEBAND_DEVICE ".bar2",
                           APPLE_BASEBAND_DEVICE_BAR2_SIZE);
 #endif
 

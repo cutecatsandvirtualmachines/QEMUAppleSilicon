@@ -9,7 +9,7 @@
 #define APPLE_SMC_MMIO_ASC (1)
 #define APPLE_SMC_MMIO_SRAM (2)
 
-#define TYPE_APPLE_SMC_IOP "apple.smc"
+#define TYPE_APPLE_SMC_IOP "apple-smc"
 OBJECT_DECLARE_TYPE(AppleSMCState, AppleSMCClass, APPLE_SMC_IOP)
 
 // #define DEBUG_SMC

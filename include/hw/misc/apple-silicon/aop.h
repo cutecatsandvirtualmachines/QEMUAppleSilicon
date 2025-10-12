@@ -25,7 +25,7 @@
 #include "hw/misc/apple-silicon/a7iop/base.h"
 #include "hw/sysbus.h"
 
-#define TYPE_APPLE_AOP "apple.aop"
+#define TYPE_APPLE_AOP "apple-aop"
 OBJECT_DECLARE_TYPE(AppleAOPState, AppleAOPClass, APPLE_AOP)
 
 typedef struct AppleAOPEndpoint AppleAOPEndpoint;

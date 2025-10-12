@@ -28,7 +28,7 @@
 #include "hw/pci/pcie_host.h"
 #include "hw/sysbus.h"
 
-#define TYPE_APPLE_NVME_MMU "apple.nvme-mmu"
+#define TYPE_APPLE_NVME_MMU "apple-nvme-mmu"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleNVMeMMUState, APPLE_NVME_MMU)
 
 #define NVME_APPLE_MAX_PEND_CMDS 0x1210
