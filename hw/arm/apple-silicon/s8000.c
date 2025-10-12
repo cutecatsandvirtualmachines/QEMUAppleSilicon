@@ -1578,8 +1578,12 @@ static void s8000_init(MachineState *machine)
 
 static ram_addr_t s8000_fixup_ram_size(ram_addr_t size)
 {
-    g_assert_cmpuint(size, ==, DRAM_SIZE);
-    return size;
+    ram_addr_t ret = ROUND_UP_16K(size);
+    if (ret != DRAM_SIZE) {
+        error_setg(&error_abort,
+                   "Specified RAM size must be 2 GiB");
+    }
+    return ret;
 }
 
 static void s8000_set_boot_mode(Object *obj, const char *value, Error **errp)
