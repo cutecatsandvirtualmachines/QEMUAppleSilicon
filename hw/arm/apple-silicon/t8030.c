@@ -2731,7 +2731,12 @@ static void t8030_init(MachineState *machine)
 
 static ram_addr_t t8030_fixup_ram_size(ram_addr_t size)
 {
-    return ROUND_UP_16K(size);
+    ram_addr_t ret = ROUND_UP_16K(size);
+    if (ret > 4 * GiB) {
+        error_setg(&error_abort,
+                   "Specified RAM size exceeds supported SoC maximum (4 GiB)");
+    }
+    return ret;
 }
 
 static void t8030_set_boot_mode(Object *obj, const char *value, Error **errp)
