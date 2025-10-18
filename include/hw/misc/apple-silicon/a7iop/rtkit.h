@@ -61,9 +61,9 @@ typedef union {
         } power;
         struct {
             uint32_t mask;
-            uint8_t block : 6;
-            uint16_t _rsvd : 13;
-            uint8_t end : 1;
+            uint32_t block : 6;
+            uint32_t _rsvd : 13;
+            uint32_t end : 1;
         } rollcall_v11;
         struct {
             uint64_t mask : 52;
@@ -71,7 +71,7 @@ typedef union {
     };
     struct {
         uint64_t _rsvd : 52;
-        uint8_t type : 4;
+        uint64_t type : 4;
     };
 } AppleRTKitManagementMessage;
 
