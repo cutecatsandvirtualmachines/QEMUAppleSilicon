@@ -74,6 +74,7 @@ typedef union {
         uint64_t type : 4;
     };
 } AppleRTKitManagementMessage;
+QEMU_BUILD_BUG_ON(sizeof(AppleRTKitManagementMessage) != sizeof(uint64_t));
 
 typedef void AppleRTKitEPHandler(void *opaque, uint32_t ep, uint64_t msg);
 
