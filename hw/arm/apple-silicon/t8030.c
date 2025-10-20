@@ -201,7 +201,7 @@ static void t8030_start_cpus(AppleT8030MachineState *t8030, uint64_t cpu_mask)
     int i;
 
     for (i = 0; i < t8030_real_cpu_count(t8030); i++) {
-        if ((cpu_mask & BIT(i)) != 0) {
+        if ((cpu_mask & BIT_ULL(i)) != 0) {
             apple_a13_set_on(t8030->cpus[i]);
         }
     }
@@ -512,7 +512,7 @@ static void t8030_memory_setup(AppleT8030MachineState *t8030)
         g_free(seprom);
 
 #if 1 // for T8030 SEPROM
-        uint64_t value = BIT(63);
+        uint64_t value = BIT_ULL(63);
         uint32_t value32_mov_x0_0 = 0xD2800000; // mov x0, #0x0
         // _entry: prevent busy-loop (data section):
         // 240000024: data_242140108 = 0x4 should set

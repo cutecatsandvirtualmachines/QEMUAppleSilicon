@@ -135,7 +135,7 @@ static void apple_rtkit_rollcall_v10_foreach(gpointer key, gpointer value,
                                              gpointer user_data)
 {
     AppleRTKitManagementMessage *msg = user_data;
-    msg->rollcall_v10.mask |= BIT(GPOINTER_TO_UINT(key));
+    msg->rollcall_v10.mask |= BIT_ULL(GPOINTER_TO_UINT(key));
 }
 
 static void apple_rtkit_rollcall_v10(AppleRTKit *s)

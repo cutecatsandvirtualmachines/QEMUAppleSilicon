@@ -152,7 +152,7 @@ static void s8000_start_cpus(MachineState *machine, uint64_t cpu_mask)
     int i;
 
     for (i = 0; i < machine->smp.cpus; i++) {
-        if ((cpu_mask & BIT(i)) != 0 && apple_a9_cpu_is_off(s8000->cpus[i])) {
+        if ((cpu_mask & BIT_ULL(i)) != 0 && apple_a9_cpu_is_off(s8000->cpus[i])) {
             apple_a9_cpu_set_on(s8000->cpus[i]);
         }
     }
