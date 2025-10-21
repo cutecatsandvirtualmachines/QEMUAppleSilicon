@@ -214,7 +214,7 @@ static const AppleRTKitOps ans_rtkit_ops = {
 };
 
 SysBusDevice *apple_ans_from_node(AppleDTNode *node, AppleA7IOPVersion version,
-                                  uint32_t protocol_version, PCIBus *pci_bus)
+                                  PCIBus *pci_bus)
 {
     DeviceState *dev;
     AppleANSState *s;
@@ -234,8 +234,7 @@ SysBusDevice *apple_ans_from_node(AppleDTNode *node, AppleA7IOPVersion version,
 
     reg = (uint64_t *)prop->data;
 
-    s->rtk = apple_rtkit_new(s, "ANS2", reg[1], version, protocol_version,
-                             &ans_rtkit_ops);
+    s->rtk = apple_rtkit_new(s, "ANS2", reg[1], version, &ans_rtkit_ops);
     object_property_add_child(OBJECT(s), "rtkit", OBJECT(s->rtk));
     apple_rtkit_register_user_ep(s->rtk, 0, s, apple_ans_ep_handler);
     sysbus_init_mmio(sbd, sysbus_mmio_get_region(SYS_BUS_DEVICE(s->rtk), 0));

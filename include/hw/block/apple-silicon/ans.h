@@ -7,6 +7,6 @@
 #include "hw/sysbus.h"
 
 SysBusDevice *apple_ans_from_node(AppleDTNode *node, AppleA7IOPVersion version,
-                                  uint32_t protocol_version, PCIBus *pci_bus);
+                                  PCIBus *pci_bus);
 
 #endif /* HW_BLOCK_APPLE_SILICON_ANS_H */

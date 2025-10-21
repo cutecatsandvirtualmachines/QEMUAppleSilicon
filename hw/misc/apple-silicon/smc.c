@@ -378,7 +378,7 @@ static const AppleRTKitOps apple_smc_rtkit_ops = {
 };
 
 SysBusDevice *apple_smc_create(AppleDTNode *node, AppleA7IOPVersion version,
-                               uint32_t protocol_version, uint64_t sram_size)
+                               uint64_t sram_size)
 {
     DeviceState *dev;
     AppleSMCState *s;
@@ -422,8 +422,7 @@ SysBusDevice *apple_smc_create(AppleDTNode *node, AppleA7IOPVersion version,
 
     reg = (uint64_t *)prop->data;
 
-    apple_rtkit_init(rtk, NULL, "SMC", reg[1], version, protocol_version,
-                     &apple_smc_rtkit_ops);
+    apple_rtkit_init(rtk, NULL, "SMC", reg[1], version, &apple_smc_rtkit_ops);
     apple_rtkit_register_user_ep(rtk, kSMCKeyEndpoint, s,
                                  &apple_smc_handle_key_endpoint);
 

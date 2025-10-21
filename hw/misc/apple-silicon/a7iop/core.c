@@ -27,6 +27,13 @@ AppleA7IOPMessage *apple_a7iop_recv_iop(AppleA7IOP *s)
 
 void apple_a7iop_cpu_start(AppleA7IOP *s, bool wake)
 {
+    // Already awake - do nothing.
+    // Skip check if Secure Enclave Processor.
+    if ((apple_a7iop_get_cpu_ctrl(s) & SEP_BOOT_MONITOR_RUN) == 0 &&
+        (apple_a7iop_get_cpu_status(s) & CPU_STATUS_IDLE) == 0) {
+        return;
+    }
+
     apple_a7iop_set_cpu_status(s, apple_a7iop_get_cpu_status(s) &
                                       ~CPU_STATUS_IDLE);
 
@@ -123,7 +130,7 @@ static void apple_a7iop_reset(DeviceState *opaque)
     s = APPLE_A7IOP(opaque);
 
     QEMU_LOCK_GUARD(&s->lock);
-    s->cpu_status = 0x00000000;
+    s->cpu_status = CPU_STATUS_IDLE;
 }
 
 static void apple_a7iop_realize(DeviceState *opaque, Error **errp)

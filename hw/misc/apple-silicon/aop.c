@@ -783,8 +783,7 @@ static void apple_aop_register_types(void)
 
 type_init(apple_aop_register_types);
 
-SysBusDevice *apple_aop_create(AppleDTNode *node, AppleA7IOPVersion version,
-                               uint32_t rtkit_protocol_version)
+SysBusDevice *apple_aop_create(AppleDTNode *node, AppleA7IOPVersion version)
 {
     DeviceState *dev;
     AppleAOPState *s;
@@ -808,15 +807,14 @@ SysBusDevice *apple_aop_create(AppleDTNode *node, AppleA7IOPVersion version,
 
     reg = (uint64_t *)prop->data;
 
-    apple_rtkit_init(rtk, NULL, "AOP", reg[1], version, rtkit_protocol_version,
-                     &apple_aop_rtkit_ops);
+    apple_rtkit_init(rtk, NULL, "AOP", reg[1], version, &apple_aop_rtkit_ops);
 
     memory_region_init_io(&s->ascv2_iomem, OBJECT(dev), &ascv2_core_reg_ops, s,
                           TYPE_APPLE_AOP ".ascv2-core-reg", reg[3]);
     sysbus_init_mmio(sbd, &s->ascv2_iomem);
 
     s->align = apple_dt_get_prop_u32_or(child, "aop-memory-alignment", 0x40,
-                                         &error_fatal);
+                                        &error_fatal);
 
     apple_dt_set_prop_u32(child, "pre-loaded", 1);
     // FIXME: This causes a panic in iOS 18+. Please investigate.

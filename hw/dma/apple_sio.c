@@ -731,7 +731,6 @@ static void apple_sio_register_types(void)
 type_init(apple_sio_register_types);
 
 SysBusDevice *apple_sio_from_node(AppleDTNode *node, AppleA7IOPVersion version,
-                                  uint32_t rtkit_protocol_version,
                                   uint32_t protocol)
 {
     DeviceState *dev;
@@ -758,8 +757,7 @@ SysBusDevice *apple_sio_from_node(AppleDTNode *node, AppleA7IOPVersion version,
 
     reg = (uint64_t *)prop->data;
 
-    apple_rtkit_init(rtk, NULL, "SIO", reg[1], version, rtkit_protocol_version,
-                     NULL);
+    apple_rtkit_init(rtk, NULL, "SIO", reg[1], version, NULL);
     apple_rtkit_register_user_ep(rtk, EP_CONTROL, s, apple_sio_handle_endpoint);
 
     memory_region_init_io(&s->ascv2_iomem, OBJECT(dev), &ascv2_core_reg_ops, s,

@@ -57,8 +57,7 @@ typedef struct {
                                      void *payload_out, uint32_t out_len);
 } AppleAOPEndpointDescription;
 
-SysBusDevice *apple_aop_create(AppleDTNode *node, AppleA7IOPVersion version,
-                               uint32_t rtkit_protocol_version);
+SysBusDevice *apple_aop_create(AppleDTNode *node, AppleA7IOPVersion version);
 AppleAOPEndpoint *apple_aop_ep_create(AppleAOPState *s, void *opaque,
                                       const AppleAOPEndpointDescription *descr);
 /// NOTE: Must be used while state is locked.

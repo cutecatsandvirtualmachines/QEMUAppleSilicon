@@ -1246,8 +1246,7 @@ static void t8030_create_ans(AppleT8030MachineState *t8030)
     PCIBus *sec_bus = pci_bridge_get_sec_bus(pci_bridge);
     apcie_host = APPLE_PCIE_HOST(
         object_property_get_link(OBJECT(t8030), "pcie.host", &error_fatal));
-    ans = apple_ans_from_node(child, APPLE_A7IOP_V4, t8030->rtkit_protocol_ver,
-                              sec_bus);
+    ans = apple_ans_from_node(child, APPLE_A7IOP_V4, sec_bus);
     g_assert_nonnull(ans);
     g_assert_nonnull(object_property_add_const_link(
         OBJECT(ans), "dma-mr", OBJECT(sysbus_mmio_get_region(sart, 1))));
@@ -1751,7 +1750,7 @@ static void t8030_create_smc(AppleT8030MachineState *t8030)
     g_assert_nonnull(iop_nub);
 
     smc = apple_smc_create(
-        child, APPLE_A7IOP_V4, t8030->rtkit_protocol_ver,
+        child, APPLE_A7IOP_V4,
         apple_dt_get_prop_u64(iop_nub, "region-size", &error_fatal));
 
     object_property_add_child(OBJECT(t8030), "smc", OBJECT(smc));
@@ -1799,8 +1798,7 @@ static void t8030_create_sio(AppleT8030MachineState *t8030)
     iop_nub = apple_dt_get_node(child, "iop-sio-nub");
     g_assert_nonnull(iop_nub);
 
-    sio = apple_sio_from_node(child, APPLE_A7IOP_V4, t8030->rtkit_protocol_ver,
-                              t8030->sio_protocol);
+    sio = apple_sio_from_node(child, APPLE_A7IOP_V4, t8030->sio_protocol);
     g_assert_nonnull(sio);
 
     object_property_add_child(OBJECT(t8030), "sio", OBJECT(sio));
@@ -2265,7 +2263,7 @@ static void t8030_create_aop(AppleT8030MachineState *t8030)
     t8030_rtkit_seg_prop_setup(child, iop_nub, region_base, region_size / 2,
                                region_size - (region_size / 2), true);
 
-    aop = apple_aop_create(child, APPLE_A7IOP_V4, t8030->rtkit_protocol_ver);
+    aop = apple_aop_create(child, APPLE_A7IOP_V4);
     g_assert_nonnull(aop);
 
     object_property_add_child(OBJECT(t8030), "aop", OBJECT(aop));
@@ -2533,24 +2531,6 @@ static void t8030_init(MachineState *machine)
                 BUILD_VERSION_MINOR(build_version),
                 BUILD_VERSION_PATCH(build_version));
     t8030->build_version = build_version;
-
-    switch (BUILD_VERSION_MAJOR(build_version)) {
-    case 13:
-        t8030->rtkit_protocol_ver = 10;
-        break;
-    case 14:
-        t8030->rtkit_protocol_ver = 11;
-        break;
-    case 15:
-    case 16:
-    case 17:
-    case 18:
-    case 26:
-        t8030->rtkit_protocol_ver = 12;
-        break;
-    default:
-        g_assert_not_reached();
-    }
 
     switch (BUILD_VERSION_MAJOR(build_version)) {
     case 13:
