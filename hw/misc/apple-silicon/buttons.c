@@ -19,7 +19,6 @@
 
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dt.h"
-#include "hw/misc/apple-silicon/a7iop/rtkit.h"
 #include "hw/misc/apple-silicon/buttons.h"
 #include "hw/misc/apple-silicon/smc.h"
 #include "hw/qdev-core.h"
@@ -122,7 +121,6 @@ static uint8_t smc_key_btnR_read(AppleSMCState *s, SMCKey *key,
                                  uint8_t length)
 {
     uint32_t value;
-    uint32_t tmpval0;
 
     if (payload == NULL || length != key->info.size) {
         return kSMCBadArgumentError;
@@ -133,9 +131,8 @@ static uint8_t smc_key_btnR_read(AppleSMCState *s, SMCKey *key,
     if (data->data == NULL) {
         data->data = g_malloc(key->info.size);
     } else {
-        uint32_t *data0 = data->data;
         DPRINTF("%s: data->data: %p ; data0[0]: 0x%08x\n", __func__, data->data,
-                data0[0]);
+                ldl_le_p(data->data));
     }
 
     DPRINTF("%s: key->info.size: 0x%08x ; length: 0x%08x\n", __func__,
@@ -153,22 +150,16 @@ static uint8_t smc_key_btnR_write(AppleSMCState *s, SMCKey *key,
                                   SMCKeyData *data, void *payload,
                                   uint8_t length)
 {
-    AppleRTKit *rtk;
     uint32_t value;
-    KeyResponse r;
-
-    AppleButtonsState *buttons = APPLE_BUTTONS(object_property_get_link(
-        OBJECT(qdev_get_machine()), "buttons", &error_fatal));
 
     if (payload == NULL || length != key->info.size) {
         return kSMCBadArgumentError;
     }
 
-    rtk = APPLE_RTKIT(s);
     value = ldl_le_p(payload);
 
     // Do not use data->data here, as it only contains the data last written to
-    // by the read function (smc_key_gP09_read)
+    // by the read function (smc_key_btnR_read)
 
     DPRINTF("%s: value: 0x%08x ; length: 0x%08x\n", __func__, value, length);
 
@@ -184,7 +175,6 @@ SysBusDevice *apple_buttons_create(AppleDTNode *node)
     DeviceState *dev;
     AppleButtonsState *s;
     SysBusDevice *sbd;
-    AppleDTProp *prop;
 
     dev = qdev_new(TYPE_APPLE_BUTTONS);
     s = APPLE_BUTTONS(dev);
@@ -225,7 +215,6 @@ static void apple_buttons_realize(DeviceState *dev, Error **errp)
 
 static void apple_buttons_unrealize(DeviceState *dev)
 {
-    AppleButtonsState *s = APPLE_BUTTONS(dev);
 }
 
 static const VMStateDescription vmstate_apple_buttons = {
