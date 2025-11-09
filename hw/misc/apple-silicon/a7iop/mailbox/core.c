@@ -242,7 +242,7 @@ static AppleA7IOPMessage *apple_a7iop_mailbox_recv(AppleA7IOPMailbox *s)
     }
 
     QTAILQ_REMOVE(&s->inbox, msg, next);
-    stl_le_p(msg->data + 0xC, ldl_le_p(msg->data + 0xC) | CTRL_COUNT(s->count));
+    stl_le_p(msg->data + 0xC, CTRL_COUNT(s->count));
     trace_apple_a7iop_mailbox_recv(s->role, ldq_le_p(msg->data),
                                    ldq_le_p(msg->data + sizeof(uint64_t)));
     s->count--;
