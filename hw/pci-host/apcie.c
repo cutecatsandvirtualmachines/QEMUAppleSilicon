@@ -127,7 +127,7 @@ static void apple_pcie_set_own_irq(ApplePCIEPort *port, int level)
     ApplePCIEHost *host = port->host;
     int irq_num = port->bus_nr;
 
-    // handling this otherwise might trigger interrupts on unmask
+    // handling this, it might trigger interrupts on unmask otherwise
     port->port_last_interrupt &= ~port->port_interrupt_mask;
 
     if (level && !port->port_last_interrupt)

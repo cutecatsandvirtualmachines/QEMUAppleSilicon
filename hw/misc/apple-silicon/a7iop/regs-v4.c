@@ -35,6 +35,7 @@
 #define REG_AXI_END_HI (0x30)
 #define REG_AXI_CTRL (0x38)
 #define AXI_CTRL_RUN BIT(0)
+#define REG_UNKNOWN_40 (0x40)
 #define REG_CPU_CTRL (0x44)
 #define REG_CPU_STATUS (0x48)
 #define REG_UNKNOWN_4C (0x4C)
@@ -45,6 +46,10 @@
 #define REG_SEP_AKF_ENABLE_INTERRUPT_BASE (0xA80)
 #define REG_KIC_MAILBOX_EXT_SET (0xC00)
 #define REG_KIC_MAILBOX_EXT_CLR (0xC04)
+#define REG_KIC_TMR0_INT_MASK_SET (0xC10)
+#define REG_KIC_TMR1_INT_MASK_SET (0xC14)
+#define REG_KIC_TMR0_INT_MASK_CLR (0xC18)
+#define REG_KIC_TMR1_INT_MASK_CLR (0xC1C)
 #define REG_IDLE_STATUS (0x8000)
 #define REG_KIC_TMR_CFG1 (0x10000)
 #define KIC_TMR_CFG_FSL_TIMER (0 << 4)
@@ -102,6 +107,30 @@ static void apple_a7iop_v4_reg_write(void *opaque, hwaddr addr,
         break;
     case REG_KIC_MAILBOX_EXT_CLR:
         break;
+    case REG_KIC_TMR0_INT_MASK_SET:
+        if (data == 0x2) {
+            s->iop_mailbox->timer0_masked = true;
+            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
+        }
+        break;
+    case REG_KIC_TMR1_INT_MASK_SET:
+        if (data == 0x2) {
+            s->iop_mailbox->timer1_masked = true;
+            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
+        }
+        break;
+    case REG_KIC_TMR0_INT_MASK_CLR:
+        if (data == 0x2) {
+            s->iop_mailbox->timer0_masked = false;
+            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
+        }
+        break;
+    case REG_KIC_TMR1_INT_MASK_CLR:
+        if (data == 0x2) {
+            s->iop_mailbox->timer1_masked = false;
+            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
+        }
+        break;
     default: {
         qemu_log_mask(LOG_UNIMP,
                       "A7IOP(%s): Unknown write to 0x" HWADDR_FMT_plx
@@ -116,45 +145,118 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
                                         unsigned size)
 {
     AppleA7IOP *s = opaque;
+    uint64_t ret = 0;
 
     switch (addr) {
     case REG_CPU_CTRL:
-        return apple_a7iop_get_cpu_ctrl(s);
+        ret = apple_a7iop_get_cpu_ctrl(s);
+        break;
     case REG_CPU_STATUS:
-        return apple_a7iop_get_cpu_status(s);
+        ret = apple_a7iop_get_cpu_status(s);
+        break;
     case REG_UNKNOWN_4C:
         // TODO: response not interrupt available, but something with
         // REG_V3_CPU_CTRL?
-        return 1;
+        ret = 1;
+        break;
+    case REG_SEP_AKF_DISABLE_INTERRUPT_BASE + 0x00: // group 0
+    case REG_SEP_AKF_DISABLE_INTERRUPT_BASE + 0x04: // group 1
+    case REG_SEP_AKF_DISABLE_INTERRUPT_BASE + 0x08: // group 2
+    case REG_SEP_AKF_DISABLE_INTERRUPT_BASE + 0x0C: // group 3
+        ret = s->iop_mailbox->interrupts_enabled
+            [(addr - REG_SEP_AKF_DISABLE_INTERRUPT_BASE) >> 2];
+        break;
+    case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x00: // group 0
+    case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x04: // group 1
+    case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x08: // group 2
+    case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x0C: // group 3
+        ret = s->iop_mailbox->interrupts_enabled
+            [(addr - REG_SEP_AKF_ENABLE_INTERRUPT_BASE) >> 2];
+        break;
     case REG_INTERRUPT_STATUS: {
         AppleA7IOPMailbox *a7iop_mbox = s->iop_mailbox;
         uint32_t interrupt_status =
             apple_a7iop_interrupt_status_pop(a7iop_mbox);
         WITH_QEMU_LOCK_GUARD(&s->lock)
         {
-            apple_a7iop_mailbox_update_irq_status(a7iop_mbox);
             if (interrupt_status) {
-                return interrupt_status;
+                if (interrupt_status == IRQ_IOP_NONEMPTY) {
+                    a7iop_mbox->int_mask |= IOP_NONEMPTY;
+                } else if (interrupt_status == IRQ_IOP_EMPTY) {
+                    a7iop_mbox->int_mask |= IOP_EMPTY;
+                } else if (interrupt_status == IRQ_AP_NONEMPTY) {
+                    a7iop_mbox->int_mask |= AP_NONEMPTY;
+                } else if (interrupt_status == IRQ_AP_EMPTY) {
+                    a7iop_mbox->int_mask |= AP_EMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN0_NONEMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN0_NONEMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN0_EMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN0_EMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN1_NONEMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN1_NONEMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN1_EMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN1_EMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN2_NONEMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN2_NONEMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN2_EMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN2_EMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN3_NONEMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN3_NONEMPTY;
+                } else if (interrupt_status == IRQ_MAILBOX_UNKN3_EMPTY) {
+                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN3_EMPTY;
+                } else if ((interrupt_status & 0xf0000) == 0x10000) {
+                    // previously wrote that as "(interrupt_status & 0xff) >> 6"
+                    int interrupt_group = (interrupt_status >> 6) & 0x3ff;
+                    g_assert_cmpuint(interrupt_group, <, 4);
+                    s->iop_mailbox->interrupts_enabled[interrupt_group] |=
+                        (interrupt_status & 0xf);
+                } else if (interrupt_status == IRQ_SEP_TIMER0) { // timer0
+                    a7iop_mbox->timer0_masked = true;
+                } else if (interrupt_status == IRQ_SEP_TIMER1) { // timer1
+                    a7iop_mbox->timer1_masked = true;
+                }
+                ret = interrupt_status;
             } else if (a7iop_mbox->iop_nonempty) {
-                return 0x40000;
+                ret = IRQ_IOP_NONEMPTY;
+                a7iop_mbox->int_mask |= IOP_NONEMPTY;
             } else if (a7iop_mbox->iop_empty) {
-                return 0x40001;
+                ret = IRQ_IOP_EMPTY;
+                a7iop_mbox->int_mask |= IOP_EMPTY;
             } else if (a7iop_mbox->ap_nonempty) {
-                return 0x40002;
+                ret = IRQ_AP_NONEMPTY;
+                a7iop_mbox->int_mask |= AP_NONEMPTY;
             } else if (a7iop_mbox->ap_empty) {
-                return 0x40003;
-            } else {
-                return 0x70001;
+                ret = IRQ_AP_EMPTY;
+                a7iop_mbox->int_mask |= AP_EMPTY;
+            } else if (!a7iop_mbox->timer0_masked) {
+                // the order of timer0/timer1 doesn't seem to matter yet
+                ret = IRQ_SEP_TIMER0;
+                a7iop_mbox->timer0_masked = true;
+            } else if (!a7iop_mbox->timer1_masked) {
+                ret = IRQ_SEP_TIMER1;
+                a7iop_mbox->timer1_masked = true;
             }
+            apple_a7iop_mailbox_update_irq(a7iop_mbox);
         }
+        break;
     }
+    case REG_KIC_TMR0_INT_MASK_SET:
+    case REG_KIC_TMR0_INT_MASK_CLR:
+        ret = (s->iop_mailbox->timer0_masked != 0) ? 0x2 : 0x0;
+        break;
+    case REG_KIC_TMR1_INT_MASK_SET:
+    case REG_KIC_TMR1_INT_MASK_CLR:
+        ret = (s->iop_mailbox->timer1_masked != 0) ? 0x2 : 0x0;
+        break;
     default: {
         qemu_log_mask(LOG_UNIMP,
                       "A7IOP(%s): Unknown read from 0x" HWADDR_FMT_plx "\n",
                       s->role, addr);
-        return 0;
+        ret = 0;
+        break;
     }
     }
+    return ret;
 }
 
 static const MemoryRegionOps apple_a7iop_v4_reg_ops = {

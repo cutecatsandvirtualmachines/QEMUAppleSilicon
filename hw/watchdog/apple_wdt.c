@@ -36,8 +36,8 @@ struct AppleWDTState {
     uint64_t cntfrq_hz;
 #pragma pack(push, 1)
     union {
-#define REG_SIZE 0x20
-        uint32_t raw[0x20 / sizeof(uint32_t)];
+#define REG_SIZE 0x44
+        uint32_t raw[REG_SIZE / sizeof(uint32_t)];
         struct {
             uint32_t chip_timer;
             uint32_t chip_reset_counter;

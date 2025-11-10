@@ -134,7 +134,7 @@ static uint64_t apple_a7iop_v4_mailbox_reg_read(void *opaque, hwaddr addr,
     case REG_INT_MASK_SET:
         return apple_a7iop_mailbox_get_int_mask(s);
     case REG_INT_MASK_CLR:
-        return ~apple_a7iop_mailbox_get_int_mask(s);
+        return apple_a7iop_mailbox_get_int_mask(s);
     case REG_IOP_CTRL:
         return apple_a7iop_mailbox_get_iop_ctrl(s);
     case REG_AP_CTRL:

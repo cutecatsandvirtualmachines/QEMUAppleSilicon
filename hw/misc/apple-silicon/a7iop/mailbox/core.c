@@ -46,11 +46,6 @@
 #define CTRL_COUNT_MASK (MAX_MESSAGE_COUNT << CTRL_COUNT_SHIFT)
 #define CTRL_COUNT(v) (((v) << CTRL_COUNT_SHIFT) & CTRL_COUNT_MASK)
 
-#define IOP_EMPTY BIT(0)
-#define IOP_NONEMPTY BIT(4)
-#define AP_EMPTY BIT(8)
-#define AP_NONEMPTY BIT(12)
-
 static bool is_interrupt_enabled(AppleA7IOPMailbox *s, uint32_t status)
 {
     if ((status & 0xf0000) == 0x10000) {
@@ -489,6 +484,8 @@ static void apple_a7iop_mailbox_reset(DeviceState *dev)
     s->iop_empty = 0;
     s->ap_nonempty = 0;
     s->ap_empty = 0;
+    s->timer0_masked = 0;
+    s->timer1_masked = 0;
     apple_a7iop_mailbox_update_irq(s);
 }
 
@@ -538,6 +535,8 @@ static const VMStateDescription vmstate_apple_a7iop_mailbox = {
             VMSTATE_BOOL(iop_empty, AppleA7IOPMailbox),
             VMSTATE_BOOL(ap_nonempty, AppleA7IOPMailbox),
             VMSTATE_BOOL(ap_empty, AppleA7IOPMailbox),
+            VMSTATE_BOOL(timer0_masked, AppleA7IOPMailbox),
+            VMSTATE_BOOL(timer1_masked, AppleA7IOPMailbox),
             VMSTATE_END_OF_LIST(),
         }
 };

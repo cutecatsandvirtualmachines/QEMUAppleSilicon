@@ -699,8 +699,8 @@ static void pmgr_unk_reg_write(void *opaque, hwaddr addr, uint64_t data,
     }
 #if 0
     qemu_log_mask(LOG_UNIMP,
-                  "PMGR reg WRITE unk @ 0x" TARGET_FMT_lx
-                  " base: 0x" TARGET_FMT_lx " value: 0x" TARGET_FMT_lx "\n",
+                  "PMGR reg WRITE unk @ 0x" HWADDR_FMT_plx
+                  " base: 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx "\n",
                   base + addr, base, data);
 #endif
 }
@@ -718,8 +718,8 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
     if ((((base + addr) & 0xfffffffb) != 0x10E20020) &&
         (((base + addr) & 0xfffffffb) != 0x11E20020)) {
         qemu_log_mask(LOG_UNIMP,
-                      "PMGR reg READ unk @ 0x" TARGET_FMT_lx
-                      " base: 0x" TARGET_FMT_lx "\n",
+                      "PMGR reg READ unk @ 0x" HWADDR_FMT_plx
+                      " base: 0x" HWADDR_FMT_plx "\n",
                       base + addr, base);
     }
 #endif
@@ -762,6 +762,10 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
                sep_bit30_current_value | (fuses_locked << 31);
     case 0x3D2BC020: // Fuses Sealed?
         return current_prod ? FUSE_ENABLED : FUSE_DISABLED;
+    // case 0x3D2BC024: // ?
+    //     return ...;
+    // case 0x3D2BC028: // ?
+    //     return ...;
     case 0x3D2BC02c: // Unknown
         return (0 << 31) | BIT(30); // bit31 causes a panic
     case 0x3D2BC030: // Chip Revision
@@ -787,10 +791,10 @@ static uint64_t pmgr_unk_reg_read(void *opaque, hwaddr addr, unsigned size)
         // disabled
         return 0xC2E9; // memory encryption AMK (Authentication Master Key)
                        // enabled
-    case 0x3D2E4800: // ???? 0x240002C00 and 0x2400037A4
-        return pmgr_unk_e4800; // 0x240002C00 and 0x2400037A4
-    case 0x3D2E4000 ... 0x3D2E417F: // ???? 0x24000377C
-        return pmgr_unk_e4000[((base + addr) - 0x3D2E4000) / 4]; // 0x24000377C
+    case 0x3D2E4800: // sep: likely lock bits: 1 on <= A13, 3 on A14
+        return pmgr_unk_e4800;
+    case 0x3D2E4000 ... 0x3D2E417F: // sep: something memory encryption and sepb
+        return pmgr_unk_e4000[((base + addr) - 0x3D2E4000) / 4];
     case 0x3C100C4C: // Could that also have been for T8015? No idea anymore.
         return 0x1;
     default:
@@ -818,7 +822,7 @@ static void pmgr_reg_write(void *opaque, hwaddr addr, uint64_t data,
     }
 #if 0
     qemu_log_mask(LOG_UNIMP,
-                  "PMGR reg WRITE @ 0x" TARGET_FMT_lx " value: 0x" TARGET_FMT_lx
+                  "PMGR reg WRITE @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
                   "\n",
                   addr, data);
 #endif
@@ -859,7 +863,7 @@ static uint64_t pmgr_reg_read(void *opaque, hwaddr addr, unsigned size)
     }
 #if 0
     qemu_log_mask(LOG_UNIMP,
-                  "PMGR reg READ @ 0x" TARGET_FMT_lx " value: 0x" TARGET_FMT_lx
+                  "PMGR reg READ @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
                   "\n",
                   addr, result);
 #endif
@@ -902,7 +906,7 @@ static uint64_t amcc_reg_read(void *opaque, hwaddr addr, unsigned size)
     memcpy(&result, t8030->amcc_reg + addr, size);
 #if 0
     qemu_log_mask(LOG_UNIMP,
-                  "AMCC reg READ @ 0x" TARGET_FMT_lx " value: 0x" TARGET_FMT_lx
+                  "AMCC reg READ @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
                   "\n",
                   orig_addr, result);
 #endif
@@ -2495,15 +2499,14 @@ static void t8030_init(MachineState *machine)
                      0);
         allocate_ram(get_system_memory(), "SEP_UNKN1", 0x242200000ULL, 0x24000,
                      0);
-        allocate_ram(get_system_memory(), "SEP_UNKN9", 0x241244000ULL, 0x4000,
-                     0);
         // for last_jump
         allocate_ram(get_system_memory(), "SEP_UNKN10", 0x242150000ULL, 0x4000,
                      0);
         allocate_ram(get_system_memory(), "SEP_UNKN11", 0x241010000ULL, 0x4000,
                      0);
-        allocate_ram(get_system_memory(), "SEP_UNKN12", 0x241240000ULL, 0x4000,
+        allocate_ram(get_system_memory(), "SEP_UNKN12", 0x241240000ULL, 0x40000,
                      0);
+        // 0x242400000 is apple-a7iop.SEP.regs
         // stack for 0x340005BF4/SEPFW
         allocate_ram(get_system_memory(), "SEP_UNKN13", 0x24020C000ULL, 0x4000,
                      0);

@@ -11,6 +11,37 @@
 #define TYPE_APPLE_A7IOP_MAILBOX "apple-a7iop-mailbox"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleA7IOPMailbox, APPLE_A7IOP_MAILBOX)
 
+#define IOP_EMPTY BIT(0)
+#define IOP_NONEMPTY BIT(4)
+#define AP_EMPTY BIT(8)
+#define AP_NONEMPTY BIT(12)
+// for >= t8020/a12 ; the following are guessed, no jailbreak available to verify
+#define MAILBOX_MASKBIT_UNKN0_EMPTY BIT(16)
+#define MAILBOX_MASKBIT_UNKN0_NONEMPTY BIT(18)
+#define MAILBOX_MASKBIT_UNKN1_EMPTY BIT(20)
+#define MAILBOX_MASKBIT_UNKN1_NONEMPTY BIT(22)
+#define MAILBOX_MASKBIT_UNKN2_EMPTY BIT(24)
+#define MAILBOX_MASKBIT_UNKN2_NONEMPTY BIT(26)
+#define MAILBOX_MASKBIT_UNKN3_EMPTY BIT(28)
+#define MAILBOX_MASKBIT_UNKN3_NONEMPTY BIT(30)
+
+#define IRQ_IOP_NONEMPTY 0x40000
+#define IRQ_IOP_EMPTY 0x40001
+#define IRQ_AP_NONEMPTY 0x40002
+#define IRQ_AP_EMPTY 0x40003
+// for >= t8020/a12 ; the following are guessed, no jailbreak available to verify
+#define IRQ_MAILBOX_UNKN0_NONEMPTY 0x40004
+#define IRQ_MAILBOX_UNKN0_EMPTY 0x40005
+#define IRQ_MAILBOX_UNKN1_NONEMPTY 0x40006
+#define IRQ_MAILBOX_UNKN1_EMPTY 0x40007
+#define IRQ_MAILBOX_UNKN2_NONEMPTY 0x40008
+#define IRQ_MAILBOX_UNKN2_EMPTY 0x40009
+#define IRQ_MAILBOX_UNKN3_NONEMPTY 0x4000A
+#define IRQ_MAILBOX_UNKN3_EMPTY 0x4000B
+// for sep timers. timer0 == phys. timer1 == virt (sepos >= 16).
+#define IRQ_SEP_TIMER0 0x70001
+#define IRQ_SEP_TIMER1 0x70009
+
 typedef struct AppleA7IOPMessage {
     uint8_t data[16];
     QTAILQ_ENTRY(AppleA7IOPMessage) next;
@@ -56,6 +87,8 @@ struct AppleA7IOPMailbox {
     bool iop_empty;
     bool ap_nonempty;
     bool ap_empty;
+    bool timer0_masked;
+    bool timer1_masked;
 };
 
 void apple_a7iop_mailbox_update_irq_status(AppleA7IOPMailbox *s);

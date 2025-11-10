@@ -314,6 +314,4 @@ AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
 
 AppleSSCState *apple_ssc_create(MachineState *machine, uint8_t addr);
 
-void enable_trace_buffer(AppleSEPState *s);
-
 #endif /* HW_ARM_APPLE_SILICON_SEP_H */
