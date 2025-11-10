@@ -15,7 +15,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(AppleA7IOPMailbox, APPLE_A7IOP_MAILBOX)
 #define IOP_NONEMPTY BIT(4)
 #define AP_EMPTY BIT(8)
 #define AP_NONEMPTY BIT(12)
-// for >= t8020/a12 ; the following are guessed, no jailbreak available to verify
+// Applicable since t8020/A12.
+// the following are guessed, no jailbreak available to verify
 #define MAILBOX_MASKBIT_UNKN0_EMPTY BIT(16)
 #define MAILBOX_MASKBIT_UNKN0_NONEMPTY BIT(18)
 #define MAILBOX_MASKBIT_UNKN1_EMPTY BIT(20)
@@ -29,7 +30,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(AppleA7IOPMailbox, APPLE_A7IOP_MAILBOX)
 #define IRQ_IOP_EMPTY 0x40001
 #define IRQ_AP_NONEMPTY 0x40002
 #define IRQ_AP_EMPTY 0x40003
-// for >= t8020/a12 ; the following are guessed, no jailbreak available to verify
+// Applicable since t8020/A12.
+// the following are guessed, no jailbreak available to verify
 #define IRQ_MAILBOX_UNKN0_NONEMPTY 0x40004
 #define IRQ_MAILBOX_UNKN0_EMPTY 0x40005
 #define IRQ_MAILBOX_UNKN1_NONEMPTY 0x40006
@@ -38,7 +40,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(AppleA7IOPMailbox, APPLE_A7IOP_MAILBOX)
 #define IRQ_MAILBOX_UNKN2_EMPTY 0x40009
 #define IRQ_MAILBOX_UNKN3_NONEMPTY 0x4000A
 #define IRQ_MAILBOX_UNKN3_EMPTY 0x4000B
-// for sep timers. timer0 == phys. timer1 == virt (sepos >= 16).
+// Timer0: phys, Timer1: virt (sepOS >= 16).
 #define IRQ_SEP_TIMER0 0x70001
 #define IRQ_SEP_TIMER1 0x70009
 

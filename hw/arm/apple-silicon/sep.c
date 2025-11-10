@@ -240,9 +240,11 @@ static void drbg_ctr_aes256_update(struct aes256_ctx *key,
     block16_set(V, &tmp[2]);
 }
 
-static void dump_cpu_handler(void) {
+static void dump_cpu_handler(void)
+{
     MachineState *machine = MACHINE(qdev_get_machine());
-    AppleSEPState *sep = APPLE_SEP(object_property_get_link(OBJECT(machine), "sep", &error_fatal));
+    AppleSEPState *sep = APPLE_SEP(
+        object_property_get_link(OBJECT(machine), "sep", &error_fatal));
     g_assert_nonnull(sep);
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 }
@@ -250,7 +252,8 @@ static void dump_cpu_handler(void) {
 static void enable_trace_buffer(AppleSEPState *s)
 {
     DPRINTF("SEP_PROGRESS: Enable Trace Buffer: s->shmbuf_base: "
-            "0x" HWADDR_FMT_plx "\n", s->shmbuf_base);
+            "0x" HWADDR_FMT_plx "\n",
+            s->shmbuf_base);
     if (!s->shmbuf_base)
         return;
     AddressSpace *nsas = &address_space_memory;
@@ -1196,8 +1199,8 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
 
-    DPRINTF("TRNG_REGS: Write at 0x" HWADDR_FMT_plx
-            " of value 0x%" PRIX64 "\n", addr, data);
+    DPRINTF("TRNG_REGS: Write at 0x" HWADDR_FMT_plx " of value 0x%" PRIX64 "\n",
+            addr, data);
 
     switch (addr) {
     case REG_TRNG_FIFO_OUTPUT_BASE ... REG_TRNG_FIFO_OUTPUT_END:
@@ -1298,7 +1301,8 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
         break;
     default:
         DPRINTF("TRNG_REGS: Unknown write at 0x" HWADDR_FMT_plx
-                " of value 0x%" PRIX64 "\n", addr, data);
+                " of value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -1357,8 +1361,8 @@ static uint64_t trng_regs_reg_read(void *opaque, hwaddr addr, unsigned size)
         DPRINTF("TRNG_REGS: Unknown read at 0x" HWADDR_FMT_plx "\n", addr);
         break;
     }
-    DPRINTF("TRNG_REGS: Read at 0x" HWADDR_FMT_plx
-            " ret: 0x%" PRIX64 "\n", addr, ret);
+    DPRINTF("TRNG_REGS: Read at 0x" HWADDR_FMT_plx " ret: 0x%" PRIX64 "\n",
+            addr, ret);
     return ret;
 }
 
@@ -1494,7 +1498,8 @@ static void pmgr_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         goto jump_default;
     default:
         DPRINTF("SEP PMGR_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
     jump_default:
         memcpy(&s->pmgr_base_regs[addr], &data, size);
         break;
@@ -1530,7 +1535,8 @@ static uint64_t pmgr_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     default:
     jump_default:
         DPRINTF("SEP PMGR_BASE: Unknown read at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, ret);
+                " with value 0x%" PRIX64 "\n",
+                addr, ret);
         break;
     }
 
@@ -1588,7 +1594,8 @@ static void key_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     jump_default:
         memcpy(&s->key_base_regs[addr], &data, size);
         DPRINTF("SEP KEY_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -1637,7 +1644,8 @@ static void key_fkey_reg_write(void *opaque, hwaddr addr, uint64_t data,
     jump_default:
         memcpy(&s->key_fkey_regs[addr], &data, size);
         DPRINTF("SEP KEY_FKEY: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -1656,7 +1664,8 @@ static uint64_t key_fkey_reg_read(void *opaque, hwaddr addr, unsigned size)
     default:
         memcpy(&ret, &s->key_fkey_regs[addr], size);
         DPRINTF("SEP KEY_FKEY: Unknown read at 0x" HWADDR_FMT_plx
-                " ret: 0x%" PRIX64 "\n", addr, ret);
+                " ret: 0x%" PRIX64 "\n",
+                addr, ret);
         break;
     }
 
@@ -1684,109 +1693,22 @@ static void key_fcfg_reg_write(void *opaque, hwaddr addr, uint64_t data,
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
 #endif
+
     switch (addr) {
     case 0x0:
-        // if (data == 0x3)
-        {
-#if 0
-        if (data == 0x101) {
-            //apple_mbox_set_custom0(s->mbox, 0x40003);
-            //apple_mbox_set_custom0(s->mbox, 0);
-            //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x40003);
-            apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x40000);
-            //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x40001);
-            //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x40002);
-            //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x40003);
-            MachineState *machine = MACHINE(qdev_get_machine());
-            DeviceState *gpio = NULL;
-            gpio = DEVICE(object_property_get_link(OBJECT(machine), "sep_gpio", &error_fatal));
-            qemu_set_irq(qdev_get_gpio_in(gpio, 0), true);
-            //((uint32_t *)s->progress_regs)[0x00] = 0xDEADBEE8ULL;
-        }
-#endif
-#if 1
-        if (data == 0x101) {
-            //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x10000); // KEY
-            //apple_a7iop_mailbox_update_iop_irq(a7iop->iop_mailbox);
-        {
-            // uint32_t i = 0;
-            // //for (i = 0x10000; i < 0x10200; i++)
-            // //for (i = 0x10000; i < 0x10040; i++)
-            // for (i = 0x10028; i < 0x10080; i++)
-            // {
-            //     if (i == 0x10008 || i == 0x1002C || i == 0x10003 || i == 0x10002 || i == 0x1000a || i == 0x10005 || i == 0x10007 || i == 0x10009)
-            //         continue;
-            //     apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
-            //                                       i);
-            // }
-            // for (i = 0x40000; i < 0x40100; i++) {
-            //     // if (i == 0x40000)
-            //     //     continue;
-            //     apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
-            //                                       i);
-            // }
-            // for (i = 0x70000; i < 0x70400; i++) {
-            //     // if (i == 0x70001)
-            //     //     continue;
-            //     apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
-            //                                       i);
-            // }
-            //apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x70001);
-        }
-        }
-#endif
-        DPRINTF("SEP KEY_FCFG: TEST0 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
-#if 0
-        apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x10000); // KEY
-#endif
-            // CPUState *cs = CPU(s->cpu);
-            // cpu_dump_state(cs, stderr, CPU_DUMP_CODE);
-            // usleep(500);
-        }
+        DPRINTF("SEP KEY_FCFG: TEST0 0x" HWADDR_FMT_plx " with value 0x%" PRIX64
+                "\n",
+                addr, data);
 
         goto jump_default;
-    case 0x4:
-        // if (data == 0x3)
-        {
-        DPRINTF("SEP KEY_FCFG: TEST1 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
-            // CPUState *cs = CPU(s->cpu);
-            // cpu_dump_state(cs, stderr, CPU_DUMP_CODE);
-        }
-        if (data == 0x3)
-        {
-            // apple_a7iop_interrupt_status_push(a7iop->iop_mailbox, 0x10000); // KEY
-            //apple_a7iop_mailbox_update_iop_irq(a7iop->iop_mailbox);
-        // {
-        //     uint32_t i = 0;
-        //     for (i = 0x10000; i < 0x10200; i++) {
-        //         // if (i == 0x10008 || i == 0x1002C)
-        //         //     continue;
-        //         apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
-        //                                           i);
-        //     }
-        //     for (i = 0x40000; i < 0x40100; i++) {
-        //         // if (i == 0x40000)
-        //         //     continue;
-        //         apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
-        //                                           i);
-        //     }
-        //     for (i = 0x70000; i < 0x70400; i++) {
-        //         // if (i == 0x70001)
-        //         //     continue;
-        //         apple_a7iop_interrupt_status_push(a7iop->iop_mailbox,
-        //                                           i);
-        //     }
-        // }
-        }
-
+    case 0x4: {
+        DPRINTF("SEP KEY_FCFG: TEST1 0x" HWADDR_FMT_plx " with value 0x%" PRIX64
+                "\n",
+                addr, data);
+    }
         goto jump_default;
     case 0x10:
-        // if ((data & 1) != 0)
         if (data == 0x1) {
-            ////((uint32_t*)s->key_fcfg_regs)[0x00 / 4] |= (1 << 31) | (1 << 0);
-            //((uint32_t *)s->key_fcfg_regs)[0x00 / 4] = (1 << 31) | (1 << 0);
             ((uint32_t *)s->key_base_regs)[0x00 / 4] = (1 << 31) | (1 << 0);
         }
         goto jump_default;
@@ -1810,7 +1732,8 @@ static void key_fcfg_reg_write(void *opaque, hwaddr addr, uint64_t data,
     jump_default:
         memcpy(&s->key_fcfg_regs[addr], &data, size);
         DPRINTF("SEP KEY_FCFG: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -1819,8 +1742,8 @@ static uint64_t key_fcfg_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     AppleSEPState *s = opaque;
     uint64_t ret = 0;
-    uint8_t key_fcfg_offset_0x14_index = 0;
-    uint8_t key_fcfg_offset_0x14_index_limit = 0;
+    uint8_t key_fcfg_offset_0x14_index;
+    uint8_t key_fcfg_offset_0x14_index_limit;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
@@ -1886,7 +1809,8 @@ static void moni_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     default:
         memcpy(&s->moni_base_regs[addr], &data, size);
         DPRINTF("SEP MONI_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -1933,7 +1857,8 @@ static void moni_thrm_reg_write(void *opaque, hwaddr addr, uint64_t data,
     default:
         memcpy(&s->moni_thrm_regs[addr], &data, size);
         DPRINTF("SEP MONI_THRM: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -1980,7 +1905,8 @@ static void eisp_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     default:
         memcpy(&s->eisp_base_regs[addr], &data, size);
         DPRINTF("SEP EISP_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -2009,14 +1935,8 @@ static const MemoryRegionOps eisp_base_reg_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
     .valid.min_access_size = 4,
     .valid.max_access_size = 4,
-    //.valid.max_access_size = 8, // when loading t8030 v14.8 SEP, TCG hflags
-    // mismatch (current:(0x00000021,0x0000000000104004)
-    // rebuilt:(0x00000021,0x0000000000104000)
     .impl.min_access_size = 4,
     .impl.max_access_size = 4,
-    //.impl.max_access_size = 8, // when loading t8030 v14.8 SEP, TCG hflags
-    // mismatch (current:(0x00000021,0x0000000000104004)
-    // rebuilt:(0x00000021,0x0000000000104000)
     .valid.unaligned = false,
 };
 
@@ -2033,7 +1953,8 @@ static void eisp_hmac_reg_write(void *opaque, hwaddr addr, uint64_t data,
     default:
         memcpy(&s->eisp_hmac_regs[addr], &data, size);
         DPRINTF("SEP EISP_HMAC: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -2089,8 +2010,7 @@ static void xor_32bit_value(uint8_t *dest, uint32_t val, int size)
     // was most likely about two single bool's between array, probably fixed.
     uint32_t *ptr = (uint32_t *)dest;
     for (int i = 0; i < size; i++) {
-        *ptr ^= val;
-        ptr++;
+        *ptr++ ^= val;
     }
 }
 
@@ -2263,8 +2183,7 @@ static void aess_handle_cmd(AppleAESSState *s)
 #endif
 #if 1
     // not GID1 && not Custom ; ignore the keysize flags here
-    if (!keyselect_non_gid0 && normalized_cmd == SEP_AESS_COMMAND_0xB)
-    {
+    if (!keyselect_non_gid0 && normalized_cmd == SEP_AESS_COMMAND_0xB) {
         {
             memset(s->key_256_in, 0, sizeof(s->key_256_in));
             memcpy(s->key_256_in, s->in_full, sizeof(s->in_full));
@@ -2273,8 +2192,7 @@ static void aess_handle_cmd(AppleAESSState *s)
 #endif
     // Not GID1 && not Custom ; Always AES256!!
     else if (!keyselect_non_gid0 &&
-             (normalized_cmd == 0x2 || normalized_cmd == 0x12))
-    {
+             (normalized_cmd == 0x2 || normalized_cmd == 0x12)) {
 #if 1
         cipher_alg = QCRYPTO_CIPHER_ALGO_AES_256;
         // VERY important, otherwise key_len would be too short in case that
@@ -2339,7 +2257,7 @@ static void aess_handle_cmd(AppleAESSState *s)
             } else {
                 memset(used_key, 0, sizeof(used_key));
             }
-        // Custom takes precedence over GID0 or GID1
+            // Custom takes precedence over GID0 or GID1
         } else if (keyselect_custom) {
             memcpy(used_key, s->key_256_in, sizeof(used_key)); // for custom
         } else {
@@ -2448,8 +2366,8 @@ static void aess_handle_cmd(AppleAESSState *s)
         memcpy(s->custom_key_index[custom_keywrap_index], s->in_full,
                sizeof(s->custom_key_index[custom_keywrap_index]));
         // unset (real zero-key) != zero-key set (not real zero-key)
-        xor_32bit_value(
-            s->custom_key_index[custom_keywrap_index], 0xDEADBEEF, 0x20 / 4);
+        xor_32bit_value(s->custom_key_index[custom_keywrap_index], 0xDEADBEEF,
+                        0x20 / 4);
         s->custom_key_index_enabled[custom_keywrap_index] = true;
         DPRINTF("SEP AESS_BASE: %s: sync/set key command 0x%02x "
                 "s->command 0x%02x\n",
@@ -2507,7 +2425,8 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     case SEP_AESS_REGISTER_INTERRUPT_STATUS: // Interrupt Status
         if ((data & 0x1) != 0) {
             s->interrupt_status &= ~0x1;
-            // apple_a7iop_interrupt_status_push(APPLE_A7IOP(s)->iop_mailbox, 0x10005); // AES_SEP
+            // apple_a7iop_interrupt_status_push(APPLE_A7IOP(s)->iop_mailbox,
+            // 0x10005); // AES_SEP
         }
         goto jump_default;
     case SEP_AESS_REGISTER_INTERRUPT_ENABLED: // Interrupt Enabled
@@ -2554,7 +2473,8 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         memcpy(&sep->aess_base_regs[addr], &data, size);
     jump_default:
         DPRINTF("SEP AESS_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -2621,7 +2541,8 @@ static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
         memcpy(&ret, &sep->aess_base_regs[addr], size);
     jump_default:
         DPRINTF("SEP AESS_BASE: Unknown read at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, ret);
+                " with value 0x%" PRIX64 "\n",
+                addr, ret);
         break;
     }
 
@@ -2652,7 +2573,8 @@ static void aesh_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     default:
         memcpy(&s->aesh_base_regs[addr], &data, size);
         DPRINTF("SEP AESH_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -2674,7 +2596,8 @@ static uint64_t aesh_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     default:
         memcpy(&ret, &s->aesh_base_regs[addr], size);
         DPRINTF("SEP AESH_BASE: Unknown read at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, ret);
+                " with value 0x%" PRIX64 "\n",
+                addr, ret);
         break;
     }
 
@@ -2704,7 +2627,8 @@ static void aesc_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     default:
         memcpy(&s->aesc_base_regs[addr], &data, size);
         DPRINTF("SEP AESC_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -2721,7 +2645,8 @@ static uint64_t aesc_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     default:
         memcpy(&ret, &s->aesc_base_regs[addr], size);
         DPRINTF("SEP AESC_BASE: Unknown read at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, ret);
+                " with value 0x%" PRIX64 "\n",
+                addr, ret);
         break;
     }
 
@@ -2818,7 +2743,8 @@ static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         memcpy(&sep->pka_base_regs[addr], &data, size);
     jump_default:
         DPRINTF("SEP PKA_BASE: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -2870,7 +2796,8 @@ static uint64_t pka_base_reg_read(void *opaque, hwaddr addr, unsigned size)
         memcpy(&ret, &sep->pka_base_regs[addr], size);
     jump_default:
         DPRINTF("SEP PKA_BASE: Unknown read at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, ret);
+                " with value 0x%" PRIX64 "\n",
+                addr, ret);
         break;
     }
 
@@ -2904,7 +2831,8 @@ static void pka_tmm_reg_write(void *opaque, hwaddr addr, uint64_t data,
         memcpy(&s->pka_tmm_regs[addr], &data, size);
     jump_default:
         DPRINTF("SEP PKA_TMM: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -2925,7 +2853,8 @@ static uint64_t pka_tmm_reg_read(void *opaque, hwaddr addr, unsigned size)
         memcpy(&ret, &s->pka_tmm_regs[addr], size);
     jump_default:
         DPRINTF("SEP PKA_TMM: Unknown read at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, ret);
+                " with value 0x%" PRIX64 "\n",
+                addr, ret);
         break;
     }
 
@@ -2956,7 +2885,8 @@ static void misc2_reg_write(void *opaque, hwaddr addr, uint64_t data,
     default:
         memcpy(&s->misc2_regs[addr], &data, size);
         DPRINTF("SEP MISC2: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }
@@ -3021,7 +2951,8 @@ static void boot_monitor_reg_write(void *opaque, hwaddr addr, uint64_t data,
                // goto jump_default;
     default:
         DPRINTF("SEP Boot Monitor: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         memcpy(&s->boot_monitor_regs[addr], &data, size);
         break;
     }
@@ -3108,7 +3039,8 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
                    (s->chip_id >= 0x8020)) // Enable Trace Buffer
         {
 #ifdef SEP_ENABLE_TRACE_BUFFER
-            // Only works for >= T8020 here, because the T8015 SEPOS is compressed.
+            // Only works for >= T8020 here, because the T8015 SEPOS is
+            // compressed.
             enable_trace_buffer(s);
 #endif
         }
@@ -3290,7 +3222,8 @@ static void progress_reg_write(void *opaque, hwaddr addr, uint64_t data,
         // jump_default:
         memcpy(&s->progress_regs[addr], &data, size);
         DPRINTF("SEP Progress: Unknown write at 0x" HWADDR_FMT_plx
-                " with value 0x%" PRIX64 "\n", addr, data);
+                " with value 0x%" PRIX64 "\n",
+                addr, data);
         break;
     }
 }

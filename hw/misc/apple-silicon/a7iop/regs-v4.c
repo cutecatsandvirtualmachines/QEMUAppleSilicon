@@ -164,14 +164,14 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
     case REG_SEP_AKF_DISABLE_INTERRUPT_BASE + 0x08: // group 2
     case REG_SEP_AKF_DISABLE_INTERRUPT_BASE + 0x0C: // group 3
         ret = s->iop_mailbox->interrupts_enabled
-            [(addr - REG_SEP_AKF_DISABLE_INTERRUPT_BASE) >> 2];
+                  [(addr - REG_SEP_AKF_DISABLE_INTERRUPT_BASE) >> 2];
         break;
     case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x00: // group 0
     case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x04: // group 1
     case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x08: // group 2
     case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x0C: // group 3
         ret = s->iop_mailbox->interrupts_enabled
-            [(addr - REG_SEP_AKF_ENABLE_INTERRUPT_BASE) >> 2];
+                  [(addr - REG_SEP_AKF_ENABLE_INTERRUPT_BASE) >> 2];
         break;
     case REG_INTERRUPT_STATUS: {
         AppleA7IOPMailbox *a7iop_mbox = s->iop_mailbox;
