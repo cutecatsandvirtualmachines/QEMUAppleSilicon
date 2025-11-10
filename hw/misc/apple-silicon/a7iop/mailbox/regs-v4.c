@@ -22,9 +22,7 @@
 #include "qemu/log.h"
 #include "private.h"
 
-// #define IOP_DEBUG
-
-#ifdef IOP_DEBUG
+#if 0
 #define IOP_LOG_MSG(s, t, msg)                                                \
     do {                                                                      \
         qemu_log_mask(LOG_GUEST_ERROR,                                        \
