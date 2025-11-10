@@ -53,9 +53,7 @@
 #include <nettle/macros.h>
 #include <nettle/memxor.h>
 
-// #define SEP_DEBUG
-
-#ifdef SEP_DEBUG
+#if 0
 #define HEXDUMP(a, b, c) qemu_hexdump(stderr, a, b, c)
 #define DPRINTF(v, ...) fprintf(stderr, v, ##__VA_ARGS__)
 #else
@@ -3917,10 +3915,8 @@ static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
         qemu_guest_getrandom_nofail(rand_bytes, sizeof(rand_bytes));
         mpz_import(temp1, sizeof(rand_bytes), 1, 1, 1, 0, rand_bytes);
         // mpz_export to read it back, just to make sure
-#ifdef SEP_DEBUG
-        mpz_export(&rand_bytes, NULL, 1, 1, 1, 0, temp1);
-#endif
-        HEXDUMP("generate_ec_priv: rand_bytes", &rand_bytes,
+        HEXDUMP("generate_ec_priv: rand_bytes",
+                mpz_export(&rand_bytes, NULL, 1, 1, 1, 0, temp1),
                 sizeof(rand_bytes));
     } else {
         mpz_init_set_str(temp1, priv, 16);
