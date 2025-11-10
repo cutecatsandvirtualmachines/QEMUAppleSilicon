@@ -3563,26 +3563,12 @@ static void apple_sep_realize(DeviceState *dev, Error **errp)
         sc->parent_realize(dev, errp);
     }
     qdev_realize(DEVICE(s->cpu), NULL, errp);
-    s->irq_or = qdev_new(TYPE_OR_IRQ);
-    object_property_add_child(OBJECT(dev), "irq-or", OBJECT(s->irq_or));
-    qdev_prop_set_uint16(s->irq_or, "num-lines", 16);
-    qdev_realize_and_unref(s->irq_or, NULL, errp);
-    if (*errp) {
-        return;
-    }
-    qdev_connect_gpio_out(s->irq_or, 0,
-                          qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
+    qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_CPU_IRQ, 0, qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
+    // qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_IOP_IRQ, 0, qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_GPIO_MAILBOX, 0));
     // timer0 == phys
-    qdev_connect_gpio_out(DEVICE(s->cpu), GTIMER_PHYS,
-                          qdev_get_gpio_in(s->irq_or, 0));
+    qdev_connect_gpio_out(DEVICE(s->cpu), GTIMER_PHYS, qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_GPIO_TIMER0, 0));
     // timer1 == virt (sepos >= 16)
-    qdev_connect_gpio_out(DEVICE(s->cpu), GTIMER_VIRT,
-                          qdev_get_gpio_in(s->irq_or, 1));
-    qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox),
-                                APPLE_A7IOP_IOP_IRQ, 0,
-                                qdev_get_gpio_in(s->irq_or, 2));
-    // qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->ap_mailbox),
-    // APPLE_A7IOP_IOP_IRQ, 0, qdev_get_gpio_in(s->irq_or, 3));
+    qdev_connect_gpio_out(DEVICE(s->cpu), GTIMER_VIRT, qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_GPIO_TIMER1, 0));
 }
 
 static void aess_reset(AppleAESSState *s)

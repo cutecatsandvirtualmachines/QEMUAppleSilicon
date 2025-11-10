@@ -138,9 +138,9 @@ static uint64_t apple_a7iop_v4_mailbox_reg_read(void *opaque, hwaddr addr,
     case REG_AP_CTRL:
         return apple_a7iop_mailbox_get_ap_ctrl(s);
     case REG_IOP_RECV0:
-        msg = apple_a7iop_mailbox_recv_iop(s);
         WITH_QEMU_LOCK_GUARD(&s->lock)
         {
+            msg = apple_a7iop_mailbox_recv_iop(s);
             if (msg == NULL) {
                 memset(s->iop_recv_reg, 0, sizeof(s->iop_recv_reg));
             } else {
@@ -159,9 +159,9 @@ static uint64_t apple_a7iop_v4_mailbox_reg_read(void *opaque, hwaddr addr,
         }
         break;
     case REG_AP_RECV0:
-        msg = apple_a7iop_mailbox_recv_ap(s);
         WITH_QEMU_LOCK_GUARD(&s->lock)
         {
+            msg = apple_a7iop_mailbox_recv_ap(s);
             if (msg == NULL) {
                 memset(s->ap_recv_reg, 0, sizeof(s->ap_recv_reg));
             } else {

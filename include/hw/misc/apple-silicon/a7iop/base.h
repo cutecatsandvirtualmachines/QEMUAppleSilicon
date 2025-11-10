@@ -22,7 +22,11 @@
 
 #include "qemu/osdep.h"
 
+#define APPLE_A7IOP_SEP_CPU_IRQ "apple-a7iop-sep-cpu-irq"
 #define APPLE_A7IOP_IOP_IRQ "apple-a7iop-iop-irq"
+#define APPLE_A7IOP_SEP_GPIO_MAILBOX "a7iop-sep-gpio-mailbox"
+#define APPLE_A7IOP_SEP_GPIO_TIMER0 "a7iop-sep-gpio-timer0"
+#define APPLE_A7IOP_SEP_GPIO_TIMER1 "a7iop-sep-gpio-timer1"
 
 typedef enum {
     APPLE_A7IOP_V2 = 0,

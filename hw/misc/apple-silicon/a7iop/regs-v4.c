@@ -92,7 +92,6 @@ static void apple_a7iop_v4_reg_write(void *opaque, hwaddr addr,
                 [(addr - REG_SEP_AKF_DISABLE_INTERRUPT_BASE) >> 2] &= ~data;
             apple_a7iop_mailbox_update_irq(s->iop_mailbox);
         }
-
         break;
     case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x00: // group 0
     case REG_SEP_AKF_ENABLE_INTERRUPT_BASE + 0x04: // group 1
@@ -106,38 +105,44 @@ static void apple_a7iop_v4_reg_write(void *opaque, hwaddr addr,
         }
         break;
     case REG_KIC_TMR0_EN:
-        if (data == 0xe) {
-            s->iop_mailbox->timer0_enabled = true;
+        WITH_QEMU_LOCK_GUARD(&s->iop_mailbox->lock)
+        {
+            s->iop_mailbox->timer0_enabled = data;
             apple_a7iop_mailbox_update_irq(s->iop_mailbox);
         }
         break;
     case REG_KIC_TMR1_EN:
-        if (data == 0xe) {
-            s->iop_mailbox->timer1_enabled = true;
+        WITH_QEMU_LOCK_GUARD(&s->iop_mailbox->lock)
+        {
+            s->iop_mailbox->timer1_enabled = data;
             apple_a7iop_mailbox_update_irq(s->iop_mailbox);
         }
         break;
     case REG_KIC_TMR0_INT_MASK_SET:
-        if (data == 0x2) {
-            s->iop_mailbox->timer0_masked = true;
-            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
-        }
-        break;
-    case REG_KIC_TMR1_INT_MASK_SET:
-        if (data == 0x2) {
-            s->iop_mailbox->timer1_masked = true;
+        WITH_QEMU_LOCK_GUARD(&s->iop_mailbox->lock)
+        {
+            s->iop_mailbox->timer0_masked |= data;
             apple_a7iop_mailbox_update_irq(s->iop_mailbox);
         }
         break;
     case REG_KIC_TMR0_INT_MASK_CLR:
-        if (data == 0x2) {
-            s->iop_mailbox->timer0_masked = false;
+        WITH_QEMU_LOCK_GUARD(&s->iop_mailbox->lock)
+        {
+            s->iop_mailbox->timer0_masked &= ~data;
+            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
+        }
+        break;
+    case REG_KIC_TMR1_INT_MASK_SET:
+        WITH_QEMU_LOCK_GUARD(&s->iop_mailbox->lock)
+        {
+            s->iop_mailbox->timer1_masked |= data;
             apple_a7iop_mailbox_update_irq(s->iop_mailbox);
         }
         break;
     case REG_KIC_TMR1_INT_MASK_CLR:
-        if (data == 0x2) {
-            s->iop_mailbox->timer1_masked = false;
+        WITH_QEMU_LOCK_GUARD(&s->iop_mailbox->lock)
+        {
+            s->iop_mailbox->timer1_masked &= ~data;
             apple_a7iop_mailbox_update_irq(s->iop_mailbox);
         }
         break;
@@ -184,86 +189,26 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
                   [(addr - REG_SEP_AKF_ENABLE_INTERRUPT_BASE) >> 2];
         break;
     case REG_INTERRUPT_STATUS: {
-        // the order should be lowest to highest
-        AppleA7IOPMailbox *a7iop_mbox = s->iop_mailbox;
-        uint32_t interrupt_status =
-            apple_a7iop_interrupt_status_pop(a7iop_mbox);
         WITH_QEMU_LOCK_GUARD(&s->lock)
         {
-            if (interrupt_status) {
-                if (interrupt_status == IRQ_IOP_NONEMPTY) {
-                    a7iop_mbox->int_mask |= IOP_NONEMPTY;
-                } else if (interrupt_status == IRQ_IOP_EMPTY) {
-                    a7iop_mbox->int_mask |= IOP_EMPTY;
-                } else if (interrupt_status == IRQ_AP_NONEMPTY) {
-                    a7iop_mbox->int_mask |= AP_NONEMPTY;
-                } else if (interrupt_status == IRQ_AP_EMPTY) {
-                    a7iop_mbox->int_mask |= AP_EMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN0_NONEMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN0_NONEMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN0_EMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN0_EMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN1_NONEMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN1_NONEMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN1_EMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN1_EMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN2_NONEMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN2_NONEMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN2_EMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN2_EMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN3_NONEMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN3_NONEMPTY;
-                } else if (interrupt_status == IRQ_MAILBOX_UNKN3_EMPTY) {
-                    a7iop_mbox->int_mask |= MAILBOX_MASKBIT_UNKN3_EMPTY;
-                } else if ((interrupt_status & 0xf0000) == 0x10000) {
-                    // previously wrote that as "(interrupt_status & 0xff) >> 6"
-                    int interrupt_group = (interrupt_status >> 6) & 0x3ff;
-                    g_assert_cmpuint(interrupt_group, <, 4);
-                    s->iop_mailbox->interrupts_enabled[interrupt_group] |=
-                        (interrupt_status & 0xf);
-                } else if (interrupt_status == IRQ_SEP_TIMER0) { // timer0
-                    a7iop_mbox->timer0_masked = true;
-                } else if (interrupt_status == IRQ_SEP_TIMER1) { // timer1
-                    a7iop_mbox->timer1_masked = true;
-                }
-                ret = interrupt_status;
-            } else if (a7iop_mbox->iop_nonempty) {
-                ret = IRQ_IOP_NONEMPTY;
-                a7iop_mbox->int_mask |= IOP_NONEMPTY;
-            } else if (a7iop_mbox->iop_empty) {
-                ret = IRQ_IOP_EMPTY;
-                a7iop_mbox->int_mask |= IOP_EMPTY;
-            } else if (a7iop_mbox->ap_nonempty) {
-                ret = IRQ_AP_NONEMPTY;
-                a7iop_mbox->int_mask |= AP_NONEMPTY;
-            } else if (a7iop_mbox->ap_empty) {
-                ret = IRQ_AP_EMPTY;
-                a7iop_mbox->int_mask |= AP_EMPTY;
-            } else if (a7iop_mbox->timer0_enabled && !a7iop_mbox->timer0_masked) {
-                ret = IRQ_SEP_TIMER0;
-                a7iop_mbox->timer0_masked = true;
-            } else if (a7iop_mbox->timer1_enabled && !a7iop_mbox->timer1_masked) {
-                ret = IRQ_SEP_TIMER1;
-                a7iop_mbox->timer1_masked = true;
-            }
-            apple_a7iop_mailbox_update_irq(a7iop_mbox);
+            AppleA7IOPMailbox *a7iop_mbox = s->iop_mailbox;
+            ret = apple_a7iop_mailbox_read_interrupt_status(a7iop_mbox);
         }
         break;
     }
     case REG_KIC_TMR0_EN:
-        ret = (s->iop_mailbox->timer0_enabled != 0) ? 0xe : 0x0;
+        ret = s->iop_mailbox->timer0_enabled;
         break;
-
     case REG_KIC_TMR1_EN:
-        ret = (s->iop_mailbox->timer1_enabled != 0) ? 0xe : 0x0;
+        ret = s->iop_mailbox->timer1_enabled;
         break;
     case REG_KIC_TMR0_INT_MASK_SET:
     case REG_KIC_TMR0_INT_MASK_CLR:
-        ret = (s->iop_mailbox->timer0_masked != 0) ? 0x2 : 0x0;
+        ret = s->iop_mailbox->timer0_masked;
         break;
     case REG_KIC_TMR1_INT_MASK_SET:
     case REG_KIC_TMR1_INT_MASK_CLR:
-        ret = (s->iop_mailbox->timer1_masked != 0) ? 0x2 : 0x0;
+        ret = s->iop_mailbox->timer1_masked;
         break;
     default: {
         qemu_log_mask(LOG_UNIMP,
