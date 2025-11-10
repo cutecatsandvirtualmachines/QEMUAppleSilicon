@@ -89,6 +89,8 @@ struct AppleA7IOPMailbox {
     bool iop_empty;
     bool ap_nonempty;
     bool ap_empty;
+    bool timer0_enabled;
+    bool timer1_enabled;
     bool timer0_masked;
     bool timer1_masked;
 };

@@ -2513,6 +2513,8 @@ static void t8030_init(MachineState *machine)
         // for SEP Panic: [elfour panic] [/,&&&&+&] exception.c:'&.
         allocate_ram(get_system_memory(), "SEP_UNKN14", 0x240A80000ULL, 0x4000,
                      0);
+        allocate_ram(get_system_memory(), "SEP_UNKN15", 0x240A90000ULL, 0x4000,
+                     0);
     }
 
     if (t8030->sep_fw_filename != NULL) {

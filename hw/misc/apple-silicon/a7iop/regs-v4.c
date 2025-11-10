@@ -44,8 +44,8 @@
 #define REG_INTERRUPT_STATUS (0x81C) // "akf: READ IRQ %x"
 #define REG_SEP_AKF_DISABLE_INTERRUPT_BASE (0xA00)
 #define REG_SEP_AKF_ENABLE_INTERRUPT_BASE (0xA80)
-#define REG_KIC_MAILBOX_EXT_SET (0xC00)
-#define REG_KIC_MAILBOX_EXT_CLR (0xC04)
+#define REG_KIC_TMR0_EN (0xC00)
+#define REG_KIC_TMR1_EN (0xC04)
 #define REG_KIC_TMR0_INT_MASK_SET (0xC10)
 #define REG_KIC_TMR1_INT_MASK_SET (0xC14)
 #define REG_KIC_TMR0_INT_MASK_CLR (0xC18)
@@ -105,7 +105,17 @@ static void apple_a7iop_v4_reg_write(void *opaque, hwaddr addr,
             apple_a7iop_mailbox_update_irq(s->iop_mailbox);
         }
         break;
-    case REG_KIC_MAILBOX_EXT_CLR:
+    case REG_KIC_TMR0_EN:
+        if (data == 0xe) {
+            s->iop_mailbox->timer0_enabled = true;
+            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
+        }
+        break;
+    case REG_KIC_TMR1_EN:
+        if (data == 0xe) {
+            s->iop_mailbox->timer1_enabled = true;
+            apple_a7iop_mailbox_update_irq(s->iop_mailbox);
+        }
         break;
     case REG_KIC_TMR0_INT_MASK_SET:
         if (data == 0x2) {
@@ -174,6 +184,7 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
                   [(addr - REG_SEP_AKF_ENABLE_INTERRUPT_BASE) >> 2];
         break;
     case REG_INTERRUPT_STATUS: {
+        // the order should be lowest to highest
         AppleA7IOPMailbox *a7iop_mbox = s->iop_mailbox;
         uint32_t interrupt_status =
             apple_a7iop_interrupt_status_pop(a7iop_mbox);
@@ -228,11 +239,10 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
             } else if (a7iop_mbox->ap_empty) {
                 ret = IRQ_AP_EMPTY;
                 a7iop_mbox->int_mask |= AP_EMPTY;
-            } else if (!a7iop_mbox->timer0_masked) {
-                // the order of timer0/timer1 doesn't seem to matter yet
+            } else if (a7iop_mbox->timer0_enabled && !a7iop_mbox->timer0_masked) {
                 ret = IRQ_SEP_TIMER0;
                 a7iop_mbox->timer0_masked = true;
-            } else if (!a7iop_mbox->timer1_masked) {
+            } else if (a7iop_mbox->timer1_enabled && !a7iop_mbox->timer1_masked) {
                 ret = IRQ_SEP_TIMER1;
                 a7iop_mbox->timer1_masked = true;
             }
@@ -240,6 +250,13 @@ static uint64_t apple_a7iop_v4_reg_read(void *opaque, hwaddr addr,
         }
         break;
     }
+    case REG_KIC_TMR0_EN:
+        ret = (s->iop_mailbox->timer0_enabled != 0) ? 0xe : 0x0;
+        break;
+
+    case REG_KIC_TMR1_EN:
+        ret = (s->iop_mailbox->timer1_enabled != 0) ? 0xe : 0x0;
+        break;
     case REG_KIC_TMR0_INT_MASK_SET:
     case REG_KIC_TMR0_INT_MASK_CLR:
         ret = (s->iop_mailbox->timer0_masked != 0) ? 0x2 : 0x0;
