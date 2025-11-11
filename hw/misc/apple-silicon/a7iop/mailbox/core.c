@@ -367,22 +367,30 @@ void apple_a7iop_interrupt_status_push(AppleA7IOPMailbox *s, uint32_t status)
 uint32_t apple_a7iop_interrupt_status_pop(AppleA7IOPMailbox *s)
 {
     uint32_t ret = 0;
-    AppleA7IOPInterruptStatusMessage *msg;
-    AppleA7IOPInterruptStatusMessage *lowest_msg;
+    AppleA7IOPInterruptStatusMessage *msg, *preferred_msg = NULL;
+    uint32_t interrupt_group_msg = 0, interrupt_group_preferred_msg = 0;
 
-    lowest_msg = NULL;
+    // order should be 0x4, 0x7, 0x1, but 0x4 shouldn't be here at all.
+
     QTAILQ_FOREACH (msg, &s->interrupt_status, entry) {
+        interrupt_group_msg = (msg->status >> 16) & 0x7;
         if (is_interrupt_enabled(s, msg->status)) {
-            if (lowest_msg == NULL || (msg->status < lowest_msg->status)) {
-                lowest_msg = msg;
+            if (preferred_msg == NULL ||
+                (interrupt_group_msg == interrupt_group_preferred_msg &&
+                    msg->status < preferred_msg->status) ||
+                (interrupt_group_msg != interrupt_group_preferred_msg &&
+                    interrupt_group_msg == 0x7)
+            ) {
+                preferred_msg = msg;
+                interrupt_group_preferred_msg = interrupt_group_msg;
             }
         }
     }
 
-    if (lowest_msg) {
-        QTAILQ_REMOVE(&s->interrupt_status, lowest_msg, entry);
-        ret = lowest_msg->status;
-        g_free(lowest_msg);
+    if (preferred_msg) {
+        QTAILQ_REMOVE(&s->interrupt_status, preferred_msg, entry);
+        ret = preferred_msg->status;
+        g_free(preferred_msg);
     }
 
     apple_a7iop_mailbox_update_irq(s);
@@ -392,10 +400,22 @@ uint32_t apple_a7iop_interrupt_status_pop(AppleA7IOPMailbox *s)
 
 uint32_t apple_a7iop_mailbox_read_interrupt_status(AppleA7IOPMailbox *s) {
     QEMU_LOCK_GUARD(&s->lock);
-    // the order should be lowest to highest
+    // the order should be: 0x4..., 0x7..., 0x1...
     AppleA7IOPMailbox *a7iop_mbox = s->iop_mailbox;
-    uint32_t interrupt_status = apple_a7iop_interrupt_status_pop(s);
-    if (interrupt_status) {
+    uint32_t interrupt_status;
+    if (a7iop_mbox->iop_nonempty) {
+        interrupt_status = IRQ_IOP_NONEMPTY;
+        a7iop_mbox->int_mask |= IOP_NONEMPTY;
+    } else if (a7iop_mbox->iop_empty) {
+        interrupt_status = IRQ_IOP_EMPTY;
+        a7iop_mbox->int_mask |= IOP_EMPTY;
+    } else if (a7iop_mbox->ap_nonempty) {
+        interrupt_status = IRQ_AP_NONEMPTY;
+        a7iop_mbox->int_mask |= AP_NONEMPTY;
+    } else if (a7iop_mbox->ap_empty) {
+        interrupt_status = IRQ_AP_EMPTY;
+        a7iop_mbox->int_mask |= AP_EMPTY;
+    } else if ((interrupt_status = apple_a7iop_interrupt_status_pop(s)) != 0) {
         if ((interrupt_status & 0xf0000) == 0x10000) {
             int interrupt_group = (interrupt_status >> 6) & 0x3ff;
             g_assert_cmpuint(interrupt_group, <, 4);
@@ -430,18 +450,6 @@ uint32_t apple_a7iop_mailbox_read_interrupt_status(AppleA7IOPMailbox *s) {
         } else if (interrupt_status == IRQ_SEP_TIMER1) {
             a7iop_mbox->timer1_masked |= REG_KIC_TMR_INT_MASK_MASK;
         }
-    } else if (a7iop_mbox->iop_nonempty) {
-        interrupt_status = IRQ_IOP_NONEMPTY;
-        a7iop_mbox->int_mask |= IOP_NONEMPTY;
-    } else if (a7iop_mbox->iop_empty) {
-        interrupt_status = IRQ_IOP_EMPTY;
-        a7iop_mbox->int_mask |= IOP_EMPTY;
-    } else if (a7iop_mbox->ap_nonempty) {
-        interrupt_status = IRQ_AP_NONEMPTY;
-        a7iop_mbox->int_mask |= AP_NONEMPTY;
-    } else if (a7iop_mbox->ap_empty) {
-        interrupt_status = IRQ_AP_EMPTY;
-        a7iop_mbox->int_mask |= AP_EMPTY;
     }
     apple_a7iop_mailbox_update_irq(s);
     return interrupt_status;
