@@ -488,6 +488,24 @@ static void ck_kp_img4_patches(CKPatcherRange *range)
     ck_patcher_find_replace(
         range, "allow unsigned firmware in img4_firmware_evaluate", pattern,
         mask, sizeof(pattern), sizeof(uint32_t), repl, NULL, 8, sizeof(repl));
+
+    static const uint8_t pattern_185[] = {
+        0xE1, 0x03, 0x00, 0xAA, // mov x1, x?
+        0xE4, 0x03, 0x00, 0xAA, // mov x4, x?
+        0x00, 0x00, 0x00, 0x94, // bl #?
+        0xF5, 0x03, 0x00, 0xAA, // mov x21, x0
+        0x00, 0x00, 0x00, 0x34, // cbz #?
+    };
+    static const uint8_t mask_185[] = { 0xFF, 0xFF, 0xE0, 0xFF, 0xFF, 0xFF,
+                                        0xE0, 0xFF, 0x00, 0x00, 0x00, 0xFC,
+                                        0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0x00,
+                                        0xF8, 0xFF };
+    QEMU_BUILD_BUG_ON(sizeof(pattern_185) != sizeof(mask_185));
+    static const uint8_t repl_185[] = { MOV_W0_0_BYTES }; // mov w0, #0
+    ck_patcher_find_replace(
+        range, "allow unsigned firmware in img4_firmware_evaluate iOS 18.5",
+        pattern_185, mask_185, sizeof(pattern_185), sizeof(uint32_t), repl_185,
+        NULL, 8, sizeof(repl_185));
 }
 
 static void ck_kp_cs_patches(CKPatcherRange *range)

@@ -352,6 +352,7 @@ static void t8030_load_kernelcache(AppleT8030MachineState *t8030,
     // TZ0
     info->tz0_addr = phys_ptr;
     info->tz0_size = 300 * MiB;
+    // info->tz0_size = 240 * MiB; // workaround for sepos >= 16
     phys_ptr += info->tz0_size;
 
     // SEP Firmware
@@ -2227,6 +2228,8 @@ static void t8030_create_mt_spi(AppleT8030MachineState *t8030)
     g_assert_nonnull(child);
 
     apple_dt_set_prop_null(child, "function-power_ana");
+    // is deleting auth-required really necessary for iOS 18.5?
+    apple_dt_del_prop_named(child, "auth-required");
 
     prop = apple_dt_get_prop(child, "interrupts");
     g_assert_nonnull(prop);

@@ -3564,7 +3564,7 @@ static void apple_sep_realize(DeviceState *dev, Error **errp)
     }
     qdev_realize(DEVICE(s->cpu), NULL, errp);
     qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_CPU_IRQ, 0, qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
-    // qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_IOP_IRQ, 0, qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_GPIO_MAILBOX, 0));
+    // mailbox irq's aren't being handled that way (anymore)
     // timer0 == phys
     qdev_connect_gpio_out(DEVICE(s->cpu), GTIMER_PHYS, qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_GPIO_TIMER0, 0));
     // timer1 == virt (sepos >= 16)

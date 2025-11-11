@@ -290,7 +290,6 @@ struct AppleSEPState {
     AppleTRNGState trng_state;
     AppleAESSState aess_state;
     ApplePKAState pka_state;
-    // DeviceState *irq_or;
     I2CSlave *nvram;
     AppleSSCState *ssc_state;
     hwaddr sep_fw_addr;

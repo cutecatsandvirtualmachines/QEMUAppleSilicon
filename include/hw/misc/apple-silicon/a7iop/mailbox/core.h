@@ -78,7 +78,6 @@ struct AppleA7IOPMailbox {
     AppleA7IOPMailbox *iop_mailbox;
     AppleA7IOPMailbox *ap_mailbox;
     qemu_irq irqs[APPLE_A7IOP_IRQ_MAX];
-    // qemu_irq iop_irq;
     qemu_irq sep_cpu_irq;
     bool iop_dir_en;
     bool ap_dir_en;
@@ -101,7 +100,6 @@ struct AppleA7IOPMailbox {
 
 void apple_a7iop_mailbox_update_irq_status(AppleA7IOPMailbox *s);
 void apple_a7iop_mailbox_update_irq(AppleA7IOPMailbox *s);
-void apple_a7iop_mailbox_update_iop_irq(AppleA7IOPMailbox *s);
 bool apple_a7iop_mailbox_is_empty(AppleA7IOPMailbox *s);
 void apple_a7iop_mailbox_send_ap(AppleA7IOPMailbox *s, AppleA7IOPMessage *msg);
 void apple_a7iop_mailbox_send_iop(AppleA7IOPMailbox *s, AppleA7IOPMessage *msg);
