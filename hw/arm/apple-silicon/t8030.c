@@ -311,16 +311,16 @@ static void t8030_load_kernelcache(AppleT8030MachineState *t8030,
     hwaddr mem_size;
     hwaddr phys_ptr;
     AppleBootInfo *info = &t8030->boot_info;
-    hwaddr text_base;
 
-    apple_boot_get_kc_bounds(t8030->kernel, &text_base, &kc_base, &kc_end);
+    apple_boot_get_kc_bounds(t8030->kernel, NULL, &kc_base, &kc_end,
+                             &info->ro_lower, &info->ro_upper);
 
     get_kaslr_slides(t8030, &g_phys_slide, &g_virt_slide);
 
     g_phys_base = DRAM_BASE;
     g_virt_base = kc_base + (g_virt_slide - g_phys_slide);
 
-    info->trustcache_addr = vtop_slid(text_base) - info->trustcache_size;
+    info->trustcache_addr = vtop_slid(info->ro_lower) - info->trustcache_size;
 
     address_space_rw(&address_space_memory, info->trustcache_addr,
                      MEMTXATTRS_UNSPECIFIED, t8030->trustcache,
@@ -667,9 +667,7 @@ static void t8030_memory_setup(AppleT8030MachineState *t8030)
         AMCC_WREG32(t8030, AMCC_PLANE_LOWER_LIMIT(i),
                     (info->trustcache_addr - info->dram_base) >> 14);
         AMCC_WREG32(t8030, AMCC_PLANE_UPPER_LIMIT(i),
-                    ((info->trustcache_addr + info->trustcache_size - 1) -
-                     info->dram_base) >>
-                        14);
+                    (vtop_slid(info->ro_upper) - info->dram_base - 1) >> 14);
         AMCC_WREG32(t8030, AMCC_PLANE_LOCK(i), 1);
         AMCC_WREG32(t8030, AMCC_PLANE_TZ0_BASE(i),
                     (info->tz0_addr - info->dram_base) >> 12);
@@ -1042,15 +1040,13 @@ static void t8030_pmgr_setup(AppleT8030MachineState *t8030)
                                     mem);
     }
 
-    {
-        MemoryRegion *mem = g_new(MemoryRegion, 1);
+    MemoryRegion *mem = g_new(MemoryRegion, 1);
 
-        snprintf(name, 32, "pmp-reg");
-        memory_region_init_io(mem, OBJECT(t8030), &pmgr_unk_reg_ops,
-                              (void *)0x3BC00000, name, 0x60000);
-        memory_region_add_subregion(get_system_memory(),
-                                    t8030->armio_base + 0x3BC00000, mem);
-    }
+    snprintf(name, 32, "pmp-reg");
+    memory_region_init_io(mem, OBJECT(t8030), &pmgr_unk_reg_ops,
+                          (void *)0x3BC00000, name, 0x60000);
+    memory_region_add_subregion(get_system_memory(),
+                                t8030->armio_base + 0x3BC00000, mem);
     apple_dt_set_prop(child, "voltage-states5", sizeof(t8030_voltage_states5),
                       t8030_voltage_states5);
     apple_dt_set_prop(child, "voltage-states9-sram",
@@ -1113,40 +1109,38 @@ static void t8030_amcc_setup(AppleT8030MachineState *t8030)
     AppleDTNode *child;
 
     child = apple_dt_get_node(t8030->device_tree, "chosen/lock-regs/amcc");
-    if (child == NULL) {
-        fprintf(stderr, "%s: warning: amcc registers unavailable? iOS 13?\n",
-                __func__);
-        AppleDTNode *chosen = apple_dt_get_node(t8030->device_tree, "chosen");
-        AppleDTNode *lock_regs = apple_dt_node_new(chosen, "lock-regs");
-        child = apple_dt_node_new(lock_regs, "amcc");
-        apple_dt_node_new(child, "amcc-ctrr-a");
+    if (child != NULL) {
+        apple_dt_set_prop_u32(child, "aperture-count", 1);
+        apple_dt_set_prop_u32(child, "aperture-size",
+                              AMCC_PLANE_COUNT * AMCC_PLANE_STRIDE + 0x4000);
+        apple_dt_set_prop_u32(child, "plane-count", AMCC_PLANE_COUNT);
+        apple_dt_set_prop_u32(child, "plane-stride", AMCC_PLANE_STRIDE);
+        apple_dt_set_prop_u64(child, "aperture-phys-addr", AMCC_BASE);
+        apple_dt_set_prop_u32(child, "cache-status-reg-offset",
+                              AMCC_PLANE_CACHE_STATUS(0));
+        apple_dt_set_prop_u32(child, "cache-status-reg-mask", 0x1F);
+        apple_dt_set_prop_u32(child, "cache-status-reg-value", 0);
+        apple_dt_set_prop_u32(child, "broadcast-reg-offset", 0x100c0);
+        apple_dt_set_prop_u32(child, "broadcast-reg-value", 1);
+
+        child = apple_dt_get_node(child, "amcc-ctrr-a");
+        g_assert_nonnull(child);
+
+        apple_dt_set_prop_u32(child, "page-size-shift", 14);
+        apple_dt_set_prop_u32(child, "lower-limit-reg-offset",
+                              AMCC_PLANE_LOWER_LIMIT(0));
+        apple_dt_set_prop_u32(child, "lower-limit-reg-mask", 0xFFFFFFFF);
+        apple_dt_set_prop_u32(child, "upper-limit-reg-offset",
+                              AMCC_PLANE_UPPER_LIMIT(0));
+        apple_dt_set_prop_u32(child, "upper-limit-reg-mask", 0xFFFFFFFF);
+        apple_dt_set_prop_u32(child, "lock-reg-offset", AMCC_PLANE_LOCK(0));
+        apple_dt_set_prop_u32(child, "lock-reg-mask", 1);
+        apple_dt_set_prop_u32(child, "lock-reg-value", 1);
+        apple_dt_set_prop_u32(child, "enable-reg-offset",
+                              AMCC_PLANE_ENABLED(0));
+        apple_dt_set_prop_u32(child, "enable-reg-value", 1);
+        apple_dt_set_prop_u32(child, "enable-reg-mask", 1);
     }
-    g_assert_nonnull(child);
-
-    apple_dt_set_prop_u32(child, "aperture-count", 1);
-    apple_dt_set_prop_u32(child, "aperture-size",
-                          AMCC_PLANE_COUNT * AMCC_PLANE_STRIDE);
-    apple_dt_set_prop_u32(child, "plane-count", AMCC_PLANE_COUNT);
-    apple_dt_set_prop_u32(child, "plane-stride", AMCC_PLANE_STRIDE);
-    apple_dt_set_prop_u64(child, "aperture-phys-addr", AMCC_BASE);
-    apple_dt_set_prop_u32(child, "cache-status-reg-offset",
-                          AMCC_PLANE_CACHE_STATUS(0));
-    apple_dt_set_prop_u32(child, "cache-status-reg-mask", 0x1F);
-    apple_dt_set_prop_u32(child, "cache-status-reg-value", 0);
-
-    child = apple_dt_get_node(child, "amcc-ctrr-a");
-    g_assert_nonnull(child);
-
-    apple_dt_set_prop_u32(child, "page-size-shift", 14);
-    apple_dt_set_prop_u32(child, "lower-limit-reg-offset",
-                          AMCC_PLANE_LOWER_LIMIT(0));
-    apple_dt_set_prop_u32(child, "lower-limit-reg-mask", 0xFFFFFFFF);
-    apple_dt_set_prop_u32(child, "upper-limit-reg-offset",
-                          AMCC_PLANE_UPPER_LIMIT(0));
-    apple_dt_set_prop_u32(child, "upper-limit-reg-mask", 0xFFFFFFFF);
-    apple_dt_set_prop_u32(child, "lock-reg-offset", AMCC_PLANE_LOCK(0));
-    apple_dt_set_prop_u32(child, "lock-reg-mask", 1);
-    apple_dt_set_prop_u32(child, "lock-reg-value", 1);
 
     memory_region_init_io(&t8030->amcc, OBJECT(t8030), &amcc_reg_ops, t8030,
                           "amcc", AMCC_SIZE);
@@ -2458,7 +2452,7 @@ static void t8030_init_done(Notifier *notifier, void *data)
 static void t8030_init(MachineState *machine)
 {
     AppleT8030MachineState *t8030;
-    uint64_t kc_base, kc_end;
+    uint64_t kc_end;
     uint32_t build_version;
     AppleDTNode *child;
     AppleDTProp *prop;
@@ -2557,11 +2551,11 @@ static void t8030_init(MachineState *machine)
     }
 
     if (t8030->securerom_filename == NULL) {
-        apple_boot_get_kc_bounds(t8030->kernel, NULL, &kc_base, &kc_end);
-        info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kc_base);
+        apple_boot_get_kc_bounds(t8030->kernel, NULL, &g_virt_base, &kc_end,
+                                 NULL, NULL);
+        info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, g_virt_base);
         info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kc_end);
 
-        g_virt_base = kc_base;
         g_phys_base = (hwaddr)apple_boot_get_macho_buffer(t8030->kernel);
 
         t8030_patch_kernel(t8030->kernel, build_version);

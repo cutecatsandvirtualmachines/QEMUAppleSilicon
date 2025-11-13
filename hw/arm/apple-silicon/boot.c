@@ -882,10 +882,12 @@ void apple_boot_setup_bootargs(uint32_t build_version, AddressSpace *as,
 }
 
 void apple_boot_get_kc_bounds(MachoHeader64 *header, uint64_t *text_base,
-                              uint64_t *kc_base, uint64_t *kc_end)
+                              uint64_t *kc_base, uint64_t *kc_end,
+                              uint64_t *ro_lower, uint64_t *ro_upper)
 {
     MachoLoadCommand *cmd = (MachoLoadCommand *)(header + 1);
-    uint64_t text_base_cur = 0, kc_base_cur = -1, kc_end_cur = 0;
+    uint64_t text_base_cur = -1ULL, kc_base_cur = -1ULL, kc_end_cur = 0,
+             ro_lower_cur = -1ULL, ro_upper_cur = 0;
     unsigned int i;
 
     for (i = 0; i < header->n_cmds;
@@ -893,29 +895,49 @@ void apple_boot_get_kc_bounds(MachoHeader64 *header, uint64_t *text_base,
         if (cmd->cmd != LC_SEGMENT_64) {
             continue;
         }
-        MachoSegmentCommand64 *segCmd = (MachoSegmentCommand64 *)cmd;
 
-        if (strncmp(segCmd->segname, "__PAGEZERO", 11) == 0 ||
-            segCmd->vmsize == 0) {
+        MachoSegmentCommand64 *seg_cmd = (MachoSegmentCommand64 *)cmd;
+
+        if (strncmp(seg_cmd->segname, "__PAGEZERO", 11) == 0 ||
+            seg_cmd->vmsize == 0) {
             continue;
         }
 
-        if (segCmd->filesize != 0 && segCmd->fileoff == 0) {
-            text_base_cur = segCmd->vmaddr;
+        if (seg_cmd->filesize != 0 && seg_cmd->fileoff == 0) {
+            text_base_cur = seg_cmd->vmaddr;
         }
 
-        if (segCmd->vmaddr < kc_base_cur) {
-            kc_base_cur = segCmd->vmaddr;
+        if (seg_cmd->vmaddr < kc_base_cur) {
+            kc_base_cur = seg_cmd->vmaddr;
         }
 
-        if (segCmd->vmaddr + segCmd->vmsize > kc_end_cur) {
-            kc_end_cur = segCmd->vmaddr + segCmd->vmsize;
+        if (seg_cmd->vmaddr + seg_cmd->vmsize > kc_end_cur) {
+            kc_end_cur = seg_cmd->vmaddr + seg_cmd->vmsize;
+        }
+
+        if ((seg_cmd->maxprot & VM_PROT_WRITE) != 0 ||
+            strncmp(seg_cmd->segname, "__LINKEDIT", 11) == 0) {
+            continue;
+        }
+
+        if (ro_lower_cur >= seg_cmd->vmaddr) {
+            ro_lower_cur = seg_cmd->vmaddr;
+        }
+
+        hwaddr vmend = seg_cmd->vmaddr + seg_cmd->vmsize;
+        if (ro_upper_cur <= vmend) {
+            ro_upper_cur = vmend;
         }
     }
 
     g_assert_cmphex(text_base_cur, !=, 0);
+    g_assert_cmphex(text_base_cur, !=, -1ULL);
     g_assert_cmphex(kc_base_cur, !=, 0);
+    g_assert_cmphex(kc_base_cur, !=, -1ULL);
     g_assert_cmphex(kc_end_cur, !=, 0);
+    g_assert_cmphex(ro_lower_cur, !=, 0);
+    g_assert_cmphex(ro_lower_cur, !=, -1ULL);
+    g_assert_cmphex(ro_upper_cur, !=, 0);
 
     if (text_base != NULL) {
         *text_base = text_base_cur;
@@ -927,6 +949,14 @@ void apple_boot_get_kc_bounds(MachoHeader64 *header, uint64_t *text_base,
 
     if (kc_end != NULL) {
         *kc_end = kc_end_cur;
+    }
+
+    if (ro_lower != NULL) {
+        *ro_lower = ro_lower_cur;
+    }
+
+    if (ro_upper != NULL) {
+        *ro_upper = ro_upper_cur;
     }
 }
 
@@ -964,7 +994,7 @@ MachoHeader64 *apple_boot_parse_macho(uint8_t *data, uint32_t len)
     header = (MachoHeader64 *)data;
     g_assert_cmphex(header->magic, ==, MACH_MAGIC_64);
 
-    apple_boot_get_kc_bounds(header, &text_base, &kc_base, &kc_end);
+    apple_boot_get_kc_bounds(header, &text_base, &kc_base, &kc_end, NULL, NULL);
     g_assert_cmphex(kc_base, <, kc_end);
 
     phys_base = g_malloc0(kc_end - kc_base);
@@ -1167,7 +1197,8 @@ static void apple_boot_process_symbols(MachoHeader64 *header, uint64_t slide)
         return;
     }
 
-    apple_boot_get_kc_bounds(header, &text_base, &kernel_low, &kernel_high);
+    apple_boot_get_kc_bounds(header, &text_base, &kernel_low, &kernel_high,
+                             NULL, NULL);
 
     data = apple_boot_get_macho_buffer(header);
     linkedit_seg = apple_boot_get_segment(header, "__LINKEDIT");
@@ -1260,7 +1291,7 @@ hwaddr apple_boot_load_macho(MachoHeader64 *header, AddressSpace *as,
     MachoHeader64 *header2 = NULL;
     void *load_from2 = NULL;
 
-    apple_boot_get_kc_bounds(header, NULL, &kc_base, &kc_end);
+    apple_boot_get_kc_bounds(header, NULL, &kc_base, &kc_end, NULL, NULL);
 
     cmd = (MachoLoadCommand *)(header + 1);
     if (!is_fileset) {
@@ -1407,7 +1438,7 @@ uint8_t *apple_boot_get_macho_buffer(MachoHeader64 *header)
 {
     uint64_t text_base, kc_base;
 
-    apple_boot_get_kc_bounds(header, &text_base, &kc_base, NULL);
+    apple_boot_get_kc_bounds(header, &text_base, &kc_base, NULL, NULL, NULL);
 
     return (uint8_t *)header - text_base + kc_base;
 }

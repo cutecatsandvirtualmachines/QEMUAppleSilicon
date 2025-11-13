@@ -68,6 +68,10 @@ typedef struct {
     uint32_t loc_rel_n;
 } MachoDysymtabCommand;
 
+#define VM_PROT_READ (0x01)
+#define VM_PROT_WRITE (0x02)
+#define VM_PROT_EXECUTE (0x04)
+
 typedef struct {
     uint32_t cmd;
     uint32_t cmd_size;
@@ -319,6 +323,8 @@ typedef struct {
     uint64_t ramdisk_size;
     hwaddr trustcache_addr;
     uint64_t trustcache_size;
+    hwaddr ro_lower;
+    hwaddr ro_upper;
     hwaddr sep_fw_addr;
     uint64_t sep_fw_size;
     hwaddr tz0_addr;
@@ -350,7 +356,8 @@ uint32_t apple_boot_platform(MachoHeader64 *header);
 const char *apple_boot_platform_string(MachoHeader64 *header);
 
 void apple_boot_get_kc_bounds(MachoHeader64 *header, uint64_t *text_base,
-                              uint64_t *kc_base, uint64_t *kc_end);
+                              uint64_t *kc_base, uint64_t *kc_end,
+                              uint64_t *ro_lower, uint64_t *ro_upper);
 
 MachoFilesetEntryCommand *apple_boot_get_fileset(MachoHeader64 *header,
                                                  const char *entry);

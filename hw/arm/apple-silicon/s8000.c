@@ -270,7 +270,8 @@ static void s8000_load_kernelcache(AppleS8000MachineState *s8000,
     hwaddr tz1_virt_low;
     hwaddr tz1_virt_high;
 
-    apple_boot_get_kc_bounds(s8000->kernel, &text_base, &kc_base, &kc_end);
+    apple_boot_get_kc_bounds(s8000->kernel, &text_base, &kc_base, &kc_end, NULL,
+                             NULL);
 
     info->kern_text_off = text_base - kc_base;
 
@@ -344,7 +345,7 @@ static void s8000_load_kernelcache(AppleS8000MachineState *s8000,
     g_virt_base = kc_base;
 
     apple_boot_get_kc_bounds(s8000->secure_monitor, NULL, &tz1_virt_low,
-                             &tz1_virt_high);
+                             &tz1_virt_high, NULL, NULL);
     info_report("TrustZone 1 virtual address low: 0x" HWADDR_FMT_plx,
                 tz1_virt_low);
     info_report("TrustZone 1 virtual address high: 0x" HWADDR_FMT_plx,
@@ -1470,7 +1471,8 @@ static void s8000_init(MachineState *machine)
                     BUILD_VERSION_PATCH(build_version));
         s8000->build_version = build_version;
 
-        apple_boot_get_kc_bounds(s8000->kernel, NULL, &kc_base, &kc_end);
+        apple_boot_get_kc_bounds(s8000->kernel, NULL, &kc_base, &kc_end, NULL,
+                                 NULL);
         info_report("Kernel virtual low: 0x" HWADDR_FMT_plx, kc_base);
         info_report("Kernel virtual high: 0x" HWADDR_FMT_plx, kc_end);
 
