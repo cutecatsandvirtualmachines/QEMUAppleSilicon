@@ -8,10 +8,7 @@
 // written/read is offset 0x147/value 0x2f
 // commands being used are: SPMI_CMD_EXT_WRITEL/SPMI_CMD_EXT_READL
 
-
-#define DEBUG_SPMI_BASEBAND
-
-#ifdef DEBUG_SPMI_BASEBAND
+#if 0
 #define DPRINTF(v, ...) fprintf(stderr, v, ##__VA_ARGS__)
 #else
 #define DPRINTF(v, ...) \
