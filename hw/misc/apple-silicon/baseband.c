@@ -32,8 +32,7 @@
 #include "qemu/units.h"
 #include "system/runstate.h"
 
-#define DEBUG_BASEBAND
-#ifdef DEBUG_BASEBAND
+#if 0
 #define HEXDUMP(a, b, c)               \
     do {                               \
         qemu_hexdump(stderr, a, b, c); \
