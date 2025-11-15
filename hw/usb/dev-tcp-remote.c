@@ -729,10 +729,6 @@ static void usb_tcp_remote_handle_packet(USBDevice *dev, USBPacket *p)
         if (p->pid == USB_TOKEN_SETUP && p->ep->nr == 0 && buffer) {
             struct usb_control_packet *setup =
                 (struct usb_control_packet *)buffer;
-#ifdef DEBUG_DEV_TCP_REMOTE
-            qemu_hexdump(stderr, __func__, buffer, pkt.length);
-#endif
-
             if (setup->bmRequestType == 0 &&
                 setup->bRequest == USB_REQ_SET_ADDRESS) {
                 s->addr = setup->wValue;
