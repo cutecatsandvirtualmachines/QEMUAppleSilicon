@@ -634,8 +634,8 @@ static void adp_v4_realize(DeviceState *dev, Error **errp)
 }
 
 static const Property adp_v4_props[] = {
-    DEFINE_PROP_UINT32("width", AppleDisplayPipeV4State, width, 828),
-    DEFINE_PROP_UINT32("height", AppleDisplayPipeV4State, height, 1792),
+    DEFINE_PROP_UINT32("width", AppleDisplayPipeV4State, width, 0),
+    DEFINE_PROP_UINT32("height", AppleDisplayPipeV4State, height, 0),
 };
 
 static const VMStateDescription vmstate_adp_v4_gp = {

@@ -2039,6 +2039,9 @@ static void t8030_create_display(AppleT8030MachineState *t8030)
         MEMORY_REGION(apple_dart_iommu_mr(dart, *(uint32_t *)prop->data)),
         &t8030->video_args);
 
+    qdev_prop_set_uint32(DEVICE(sbd), "width", t8030->disp_width);
+    qdev_prop_set_uint32(DEVICE(sbd), "height", t8030->disp_height);
+
     t8030->video_args.display =
         !apple_boot_contains_boot_arg(machine->kernel_cmdline, "-s", false) &&
         !apple_boot_contains_boot_arg(machine->kernel_cmdline, "-v", false);
@@ -2384,8 +2387,8 @@ static void t8030_cpu_reset(AppleT8030MachineState *t8030)
     CPU_FOREACH (cpu) {
         acpu = APPLE_A13(cpu);
 
-        object_property_set_uint(OBJECT(cpu), "pauth-mlo", m_lo, &error_abort);
-        object_property_set_uint(OBJECT(cpu), "pauth-mhi", m_hi, &error_abort);
+        qdev_prop_set_uint64(DEVICE(cpu), "pauth-mlo", m_lo);
+        qdev_prop_set_uint64(DEVICE(cpu), "pauth-mhi", m_hi);
 
         if (t8030->securerom_filename == NULL) {
             if (acpu->cpu_id != A13_MAX_CPU) {
@@ -2772,6 +2775,8 @@ PROP_STR_GETTER_SETTER(config_number);
 PROP_STR_GETTER_SETTER(serial_number);
 PROP_STR_GETTER_SETTER(mlb_serial_number);
 PROP_STR_GETTER_SETTER(regulatory_model);
+PROP_VISIT_GETTER_SETTER(uint32, disp_width);
+PROP_VISIT_GETTER_SETTER(uint32, disp_height);
 
 static void t8030_class_init(ObjectClass *klass, const void *data)
 {
@@ -2869,6 +2874,14 @@ static void t8030_class_init(ObjectClass *klass, const void *data)
     object_property_set_default_str(oprop, "CKQEMU8030");
     object_class_property_set_description(klass, "regulatory-model",
                                           "Regulatory Model Number");
+    oprop = object_class_property_add(klass, "disp-width", "uint32",
+                                      t8030_get_disp_width,
+                                      t8030_set_disp_width, NULL, NULL);
+    object_property_set_default_uint(oprop, 828);
+    oprop = object_class_property_add(klass, "disp-height", "uint32",
+                                      t8030_get_disp_height,
+                                      t8030_set_disp_height, NULL, NULL);
+    object_property_set_default_uint(oprop, 1792);
 }
 
 static const TypeInfo t8030_info = {
