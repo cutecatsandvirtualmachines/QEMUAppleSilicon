@@ -37,9 +37,7 @@
 #include "qobject/qdict.h"
 #include "system/dma.h"
 
-// #define DEBUG_DART
-
-#ifdef DEBUG_DART
+#if 0
 #define DPRINTF(fmt, ...)                             \
     do {                                              \
         fprintf(stderr, "dart: " fmt, ##__VA_ARGS__); \
@@ -285,9 +283,7 @@ static void apple_dart_update_irq(AppleDARTState *s)
             level |= (o->error_status != 0);
         }
     }
-#ifndef DEBUG_DART
     qemu_set_irq(s->irq, level);
-#endif /* DEBUG_DART */
 }
 
 static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
