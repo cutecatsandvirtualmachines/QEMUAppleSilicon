@@ -3,9 +3,7 @@
 #include "qapi/error.h"
 #include "system/address-spaces.h"
 
-// #define DEBUG_SART
-
-#ifdef DEBUG_SART
+#if 0
 #define DPRINTF(fmt, ...)                    \
     do {                                     \
         printf("sart: " fmt, ##__VA_ARGS__); \
