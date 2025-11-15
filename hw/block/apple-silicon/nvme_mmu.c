@@ -22,10 +22,9 @@
 #include "hw/block/apple-silicon/nvme_mmu.h"
 #include "hw/pci-host/apcie.h"
 #include "hw/pci/msi.h"
-#include "qemu/log.h"
 
-#define DEBUG_NVME_MMU
-#ifdef DEBUG_NVME_MMU
+#if 0
+#include "qemu/log.h"
 #define DPRINTF(fmt, ...)                             \
     do {                                              \
         qemu_log_mask(LOG_UNIMP, fmt, ##__VA_ARGS__); \
