@@ -27,8 +27,7 @@
 #include "migration/vmstate.h"
 #include "qemu/log.h"
 
-// #define DEBUG_ANS
-#ifdef DEBUG_ANS
+#if 0
 #define DPRINTF(fmt, ...)                             \
     do {                                              \
         qemu_log_mask(LOG_UNIMP, fmt, ##__VA_ARGS__); \
