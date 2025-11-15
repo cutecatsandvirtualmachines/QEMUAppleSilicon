@@ -32,9 +32,7 @@
 #include "tcp-usb.h"
 #include "trace.h"
 
-// #define DEBUG_DEV_TCP_REMOTE
-
-#ifdef DEBUG_DEV_TCP_REMOTE
+#if 0
 #define DPRINTF(fmt, ...)                                       \
     do {                                                        \
         fprintf(stderr, "dev-tcp-remote: " fmt, ##__VA_ARGS__); \
