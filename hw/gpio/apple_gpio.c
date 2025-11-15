@@ -32,9 +32,7 @@
 #include "qemu/log.h"
 #include "qemu/module.h"
 
-// #define DEBUG_GPIO
-
-#ifdef DEBUG_GPIO
+#if 0
 #define DPRINTF(fmt, ...) fprintf(stderr, fmt "\n", __VA_ARGS__)
 #else
 #define DPRINTF(fmt, ...) \
