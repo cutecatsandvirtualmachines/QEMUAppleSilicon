@@ -598,9 +598,9 @@ static void adp_v4_blit_rect_black(AppleDisplayPipeV4State *s, uint16_t width,
 static void adp_v4_update_disp_image_ptr(AppleDisplayPipeV4State *s)
 {
     qemu_pixman_image_unref(s->disp_image);
-    s->disp_image = pixman_image_create_bits(
-        PIXMAN_a8r8g8b8, s->width, s->height, (uint32_t *)adp_v4_get_ram_ptr(s),
-        s->width * sizeof(uint32_t));
+    s->disp_image = pixman_image_create_bits(PIXMAN_a8r8g8b8, s->width,
+                                             s->height, adp_v4_get_ram_ptr(s),
+                                             s->width * sizeof(uint32_t));
 }
 
 static void adp_v4_reset_hold(Object *obj, ResetType type)
@@ -665,7 +665,7 @@ static const VMStateDescription vmstate_adp_v4_gp = {
 };
 
 static const VMStateDescription vmstate_adp_v4_blend_unit = {
-    .name = "Apple Display Pipe v4 Blend Unit State",
+    .name = "ADPV4BlendUnitState",
     .version_id = 0,
     .minimum_version_id = 0,
     .fields =
@@ -678,7 +678,7 @@ static const VMStateDescription vmstate_adp_v4_blend_unit = {
 };
 
 static const VMStateDescription vmstate_adp_v4 = {
-    .name = "Apple Display Pipe V4 State",
+    .name = "AppleDisplayPipeV4State",
     .version_id = 0,
     .minimum_version_id = 0,
     .fields =
@@ -703,6 +703,7 @@ static void adp_v4_class_init(ObjectClass *klass, const void *data)
 
     rc->phases.hold = adp_v4_reset_hold;
 
+    dc->desc = "Apple Display Pipe V4";
     device_class_set_props(dc, adp_v4_props);
     dc->realize = adp_v4_realize;
     dc->vmsd = &vmstate_adp_v4;
@@ -813,8 +814,7 @@ static void adp_v4_update_disp_image_bh(void *opaque)
 static uint32_t adp_timing_info[] = { 0x33C, 0x90, 0x1, 0x1,
                                       0x700, 0x1,  0x1, 0x1 };
 
-SysBusDevice *adp_v4_from_node(AppleDTNode *node, MemoryRegion *dma_mr,
-                               AppleVideoArgs *video_args)
+SysBusDevice *adp_v4_from_node(AppleDTNode *node, MemoryRegion *dma_mr)
 {
     DeviceState *dev;
     SysBusDevice *sbd;
@@ -829,12 +829,6 @@ SysBusDevice *adp_v4_from_node(AppleDTNode *node, MemoryRegion *dma_mr,
     dev = qdev_new(TYPE_APPLE_DISPLAY_PIPE_V4);
     sbd = SYS_BUS_DEVICE(dev);
     s = APPLE_DISPLAY_PIPE_V4(sbd);
-
-    video_args->row_bytes = s->width * sizeof(uint32_t);
-    video_args->width = s->width;
-    video_args->height = s->height;
-    video_args->depth.depth = sizeof(uint32_t) * 8;
-    video_args->depth.rotate = 1;
 
     qemu_mutex_init(&s->lock);
 

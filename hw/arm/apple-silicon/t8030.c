@@ -2035,12 +2035,16 @@ static void t8030_create_display(AppleT8030MachineState *t8030)
     child = apple_dt_get_node(t8030->device_tree, "arm-io/disp0");
 
     sbd = adp_v4_from_node(
-        child,
-        MEMORY_REGION(apple_dart_iommu_mr(dart, *(uint32_t *)prop->data)),
-        &t8030->video_args);
+        child, MEMORY_REGION(apple_dart_iommu_mr(dart, ldl_le_p(prop->data))));
 
     qdev_prop_set_uint32(DEVICE(sbd), "width", t8030->disp_width);
     qdev_prop_set_uint32(DEVICE(sbd), "height", t8030->disp_height);
+
+    t8030->video_args.row_bytes = t8030->disp_width * sizeof(uint32_t);
+    t8030->video_args.width = t8030->disp_width;
+    t8030->video_args.height = t8030->disp_height;
+    t8030->video_args.depth.depth = sizeof(uint32_t) * 8;
+    t8030->video_args.depth.rotate = 1;
 
     t8030->video_args.display =
         !apple_boot_contains_boot_arg(machine->kernel_cmdline, "-s", false) &&
