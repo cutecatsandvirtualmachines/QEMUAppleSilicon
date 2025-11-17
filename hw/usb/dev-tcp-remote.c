@@ -187,7 +187,7 @@ static int usb_tcp_remote_read(USBTCPRemoteState *s, void *buffer,
     }
 
     while (n < length) {
-        ret = read(s->fd, (char *)buffer + n, length - n);
+        ret = recv(s->fd, buffer + n, length - n, 0);
         if (ret <= 0) {
             if (locked) {
                 bql_lock();
@@ -213,7 +213,7 @@ static int usb_tcp_remote_write(USBTCPRemoteState *s, void *buffer,
     int n = 0;
 
     while (n < length) {
-        ret = write(s->fd, (char *)buffer + n, length - n);
+        ret = send(s->fd, (char *)buffer + n, length - n, 0);
         if (ret <= 0) {
             usb_tcp_remote_closed(s);
             return -errno;
