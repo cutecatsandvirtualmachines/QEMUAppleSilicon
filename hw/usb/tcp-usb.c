@@ -18,8 +18,8 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/qdev-properties.h" // do not reorder this
 #include "hw/core/qdev-prop-internal.h"
-#include "hw/qdev-properties.h"
 #include "hw/usb/tcp-usb.h"
 
 const QEnumLookup USBTCPRemoteConnType_lookup = {
