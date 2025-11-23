@@ -19,6 +19,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "block/aio.h"
 #include "crypto/cipher.h"
 #include "exec/cputlb.h"
 #include "exec/tb-flush.h"
@@ -113,6 +114,7 @@ typedef struct {
 #define SEP_AESS_CMD_FLAG_KEYSELECT_CUSTOM \
     SEP_AESS_CMD_FLAG_KEYSELECT_CUSTOM_T8020
 
+#define SEP_AESS_CMD_MASK 0x3FF
 
 #define SEP_AESS_CMD_WITHOUT_KEYSIZE(cmd)                                    \
     (cmd &                                                                   \
@@ -157,8 +159,18 @@ typedef struct {
 #define SEP_AESS_REGISTER_TAG_OUT 0x60
 #define SEP_AESS_REGISTER_OUT 0x70
 
-#define SEP_AESS_REGISTER_STATUS_RUN_COMMAND 0x1
-#define SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT 0x2
+#define SEP_AESS_REGISTER_STATUS_RUN_COMMAND BIT(0)
+#define SEP_AESS_REGISTER_STATUS_ACTIVE BIT(1)
+#define SEP_AESS_REGISTER_STATUS_UNKN0 BIT(8)
+#define SEP_AESS_REGISTER_STATUS_UNKN1_ERROR BIT(9)
+#define SEP_AESS_REGISTER_STATUS_UNKN2_ERROR BIT(10)
+
+#define SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE BIT(0)
+#define SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT BIT(1)
+
+#define SEP_AESS_REGISTER_INTERRUPT_ENABLED_MASK 0x3
+#define SEP_AESS_REGISTER_INTERRUPT_ENABLED_RAISE_ON_COMPLETION BIT(0)
+#define SEP_AESS_REGISTER_INTERRUPT_ENABLED_INTERRUPT_ENABLED BIT(1)
 
 #define SEP_AESS_SEED_BITS_BIT0 (1 << 0)
 #define SEP_AESS_SEED_BITS_BIT27 (1 << 27) // cmds 0x50 and 0x90
@@ -2015,17 +2027,19 @@ static void xor_32bit_value(uint8_t *dest, uint32_t val, int size)
 static void aess_raise_interrupt(AppleAESSState *s)
 {
     AppleSEPState *sep = s->sep;
-    // bit1==interrupts_enabled; bit0==interrupt_will_activate ?
-    if ((s->interrupt_enabled & 0x3) == 0x3) {
-        s->interrupt_status |= 0x1;
+    s->interrupt_status |= SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
+    if ((s->interrupt_enabled & SEP_AESS_REGISTER_INTERRUPT_ENABLED_MASK) ==
+            (SEP_AESS_REGISTER_INTERRUPT_ENABLED_INTERRUPT_ENABLED |
+             SEP_AESS_REGISTER_INTERRUPT_ENABLED_RAISE_ON_COMPLETION
+        )) {
         apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
                                           0x10005); // AESS
     }
 }
 
 // TODO: This is 100% wrong, but it works anyhow/anyway.
-// Somewhen, I'll have to handle keyunwrap (if that exists) and PKA. For the PKA
-// ECDH command, reuse code from SSC.
+// Somewhen, I'll have to handle keyunwrap (if that exists) and PKA.
+// For the PKA ECDH command, reuse code from SSC.
 
 static void aess_keywrap_uid(AppleAESSState *s, uint8_t *in, uint8_t *out,
                              QCryptoCipherAlgo cipher_alg)
@@ -2086,9 +2100,9 @@ static void aess_keywrap_uid(AppleAESSState *s, uint8_t *in, uint8_t *out,
     HEXDUMP("aess_keywrap_uid: out1", out, data_len);
     s->reg_0x14_keywrap_iterations_counter = 0;
     qcrypto_cipher_free(cipher);
-    // only enabled by driver_ops 0x4/0x1D (keywrap) if
-    // iterations_counter is over 10/0xA.
-    aess_raise_interrupt(s);
+    // interrupts are normally only raised by driver_ops 0x4/0x1D (keywrap) if
+    // iterations_counter is over 10/0xA, but don't take that for granted.
+    //aess_raise_interrupt(s); // run it always instead
 }
 
 static int aess_get_custom_keywrap_index(uint32_t cmd)
@@ -2173,7 +2187,6 @@ static void aess_handle_cmd(AppleAESSState *s)
         check_register_0x18_KEYDISABLE_BIT_INVALID(s);
     bool valid_command = true;
     bool invalid_parameters = register_0x18_KEYDISABLE_BIT_INVALID;
-    s->interrupt_status = 0;
 #if 1
     // not correct behavior, but SEPFW likes to complain if it doesn't expect
     // the output to be zero, so keep it.
@@ -2385,18 +2398,21 @@ static void aess_handle_cmd(AppleAESSState *s)
         // valid_command = false;
     }
 
-////s->status |= (1 << 1); // TODO: only on success^H^H^Hfailure
 jump_return:
     invalid_parameters |= !valid_command;
-    s->interrupt_status =
-        ((invalid_parameters << 1) | (s->interrupt_status & 0x2)) |
-        (valid_command << 0); // ???? bit1 clear, bit0 set
-    ////s->interrupt_status = (invalid_parameters << 1) | (valid_command << 0);
-    ///// ????
-    /// bit1 clear, bit0 set
-    // s->interrupt_status = (0 << 1) | (1 << 0); // ???? bit1 clear, bit0 set
-    ////s->interrupt_status = (1 << 1) | (1 << 0); // set from 3 to 1 after the
-    /// next read
+    if (invalid_parameters) {
+        // always keep this flag
+        s->interrupt_status |= SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT;
+    }
+    s->status &= ~SEP_AESS_REGISTER_STATUS_ACTIVE;
+    // call raise_interrupt always instead of only on keywrap, because it's
+    // checking conditions
+    aess_raise_interrupt(s);
+}
+
+static void aess_handle_cmd_bh(void *opaque) {
+    AppleAESSState *s = opaque;
+    aess_handle_cmd(s);
 }
 
 static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
@@ -2404,6 +2420,7 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 {
     AppleAESSState *s = opaque;
     AppleSEPState *sep = s->sep;
+    uint64_t orig_data = data;
 
 #ifdef ENABLE_CPU_DUMP_STATE
     DPRINTF("\n");
@@ -2411,38 +2428,40 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 #endif
     switch (addr) {
     case SEP_AESS_REGISTER_STATUS: // Status
-        s->status = data;
+        s->status = data; // surely no bitwise OR?
         if ((s->status & SEP_AESS_REGISTER_STATUS_RUN_COMMAND) != 0) {
-            aess_handle_cmd(s);
+            s->status &= ~SEP_AESS_REGISTER_STATUS_RUN_COMMAND;
+            s->status |= SEP_AESS_REGISTER_STATUS_ACTIVE;
+            s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
+            //aess_handle_cmd(s);
+            qemu_bh_schedule(s->command_bh);
         }
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_COMMAND: // Command
-        data &= 0x3FF; // for T8020
+        data &= SEP_AESS_CMD_MASK; // for T8020
         s->command = data;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_STATUS: // Interrupt Status
-        if ((data & 0x1) != 0) {
-            s->interrupt_status &= ~0x1;
-            // apple_a7iop_interrupt_status_push(APPLE_A7IOP(s)->iop_mailbox,
-            // 0x10005); // AES_SEP
+        if ((data & SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE) != 0) {
+            s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
         }
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_ENABLED: // Interrupt Enabled
         // bit1 == maybe enable interrupt(s)
         // bit0 == maybe activate interrupt when command is done ;
         // ... used for keywrap with > 10/0xA iterations
-        data &= 0x3;
+        data &= SEP_AESS_REGISTER_INTERRUPT_ENABLED_MASK;
         s->interrupt_enabled = data;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_0x14_KEYWRAP_ITERATIONS_COUNTER: // has affect on
                                                             // keywrap
         s->reg_0x14_keywrap_iterations_counter = data;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_0x18_KEYDISABLE: // has affect on keywrap
         data |= s->reg_0x18_keydisable;
         data &= 0x1B;
         s->reg_0x18_keydisable = data;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_SEED_BITS: // seed_bits ;; has affect on keywrap ;;
                                       // offset 0x1C == flags offset: stores
                                       // flags, like if the device has been
@@ -2452,27 +2471,28 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         data &= ~s->seed_bits_lock;
         data |= s->seed_bits & s->seed_bits_lock;
         s->seed_bits = data;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_SEED_BITS_LOCK: // seed_bits_lock ;; has no affect on
                                            // keywrap?
         data |= s->seed_bits_lock; // don't allow unsetting
         s->seed_bits_lock = data;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_IV ... SEP_AESS_REGISTER_IV + 0xC: // IV
     case 0x100 ... 0x10C: // IV T8015
         memcpy(&s->iv[addr & 0xF], &data, 4);
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_IN ... SEP_AESS_REGISTER_IN + 0xC: // IN
     case 0x110 ... 0x11C: // IN T8015
         memcpy(&s->in[addr & 0xF], &data, 4);
-        goto jump_default;
+        goto jump_log;
     // AES engine?: case 0xA4: 0x40 bytes from TRNG
     default:
-        memcpy(&sep->aess_base_regs[addr], &data, size);
     jump_default:
+        memcpy(&sep->aess_base_regs[addr], &data, size);
+    jump_log:
         DPRINTF("SEP AESS_BASE: Unknown write at 0x" HWADDR_FMT_plx
                 " with value 0x%" PRIX64 "\n",
-                addr, data);
+                addr, orig_data);
         break;
     }
 }
@@ -2489,55 +2509,54 @@ static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 #endif
     switch (addr) {
     case SEP_AESS_REGISTER_STATUS: // Status
-        s->status &= ~(1 << 1);
-        s->status |= 0x100; // ???
         ret = s->status;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_COMMAND: // Command
         ret = s->command;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_STATUS: // Interrupt Status
         ret = s->interrupt_status;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_ENABLED: // Interrupt Enabled
         ret = s->interrupt_enabled;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_0x14_KEYWRAP_ITERATIONS_COUNTER:
         ret = s->reg_0x14_keywrap_iterations_counter;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_0x18_KEYDISABLE:
         ret = s->reg_0x18_keydisable;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_SEED_BITS: // seed_bits
         ret = s->seed_bits;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_SEED_BITS_LOCK: // seed_bits_lock
         ret = s->seed_bits_lock;
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_IV ... SEP_AESS_REGISTER_IV + 0xC: // IV
         ////case 0x100 ... 0x10C: // IV T8015 ; is this also being read?
         memcpy(&ret, &s->iv[addr & 0xF], 4);
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_IN ... SEP_AESS_REGISTER_IN + 0xC: // IN
         ////case 0x110 ... 0x11C: // IN T8015 ; is this also being read?
         memcpy(&ret, &s->in[addr & 0xF], 4);
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_TAG_OUT ... SEP_AESS_REGISTER_TAG_OUT +
         0xC: // TAG OUT
         memcpy(&ret, &s->tag_out[addr & 0xF], 4);
-        goto jump_default;
+        goto jump_log;
     case SEP_AESS_REGISTER_OUT ... SEP_AESS_REGISTER_OUT + 0xC: // OUT
         memcpy(&ret, &s->out[addr & 0xF], 4);
-        goto jump_default;
+        goto jump_log;
     case 0xE4: // ????
         ret = 0x0;
-        goto jump_default;
+        goto jump_log;
     case 0x280: // ????
         ret = 0x1;
-        goto jump_default;
+        goto jump_log;
     default:
-        memcpy(&ret, &sep->aess_base_regs[addr], size);
     jump_default:
+        memcpy(&ret, &sep->aess_base_regs[addr], size);
+    jump_log:
         DPRINTF("SEP AESS_BASE: Unknown read at 0x" HWADDR_FMT_plx
                 " with value 0x%" PRIX64 "\n",
                 addr, ret);
@@ -2662,6 +2681,36 @@ static const MemoryRegionOps aesc_base_reg_ops = {
     .valid.unaligned = false,
 };
 
+static void pka_handle_cmd(ApplePKAState *s) {
+    AppleSEPState *sep = s->sep;
+
+    // values: 0x4/0x8/0x10/0x20/0x40/0x80/0x100
+    if (s->command == 0x40) { // migrate data with PKA
+        apple_a7iop_interrupt_status_push(
+            APPLE_A7IOP(sep)->iop_mailbox,
+            0x1000A); // ack first interrupt/0xA
+        // apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
+        // 0x1000B); // ack second interrupt/0xB
+        apple_a7iop_interrupt_status_push(
+            APPLE_A7IOP(sep)->iop_mailbox,
+            0x1000C); // ack third interrupt/0xC
+    } else if (s->command == 0x80) { // MPKA_ECPUB_ATTEST
+        apple_a7iop_interrupt_status_push(
+            APPLE_A7IOP(sep)->iop_mailbox,
+            0x1000A); // ack first interrupt/0xA
+        // apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
+        // 0x1000B); // ack second interrupt/0xB
+        apple_a7iop_interrupt_status_push(
+            APPLE_A7IOP(sep)->iop_mailbox,
+            0x1000C); // ack third interrupt/0xC
+    }
+}
+
+static void pka_handle_cmd_bh(void *opaque) {
+    ApplePKAState *s = opaque;
+    pka_handle_cmd(s);
+}
+
 static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                unsigned size)
 {
@@ -2673,27 +2722,11 @@ static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
 #endif
     switch (addr) {
     case 0x0: // maybe command
-        // values: 0x4/0x8/0x10/0x20/0x40/0x80/0x100
-        if (data == 0x40) { // migrate data with PKA
-            apple_a7iop_interrupt_status_push(
-                APPLE_A7IOP(sep)->iop_mailbox,
-                0x1000A); // ack first interrupt/0xA
-            // apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
-            // 0x1000B); // ack second interrupt/0xB
-            apple_a7iop_interrupt_status_push(
-                APPLE_A7IOP(sep)->iop_mailbox,
-                0x1000C); // ack third interrupt/0xC
-        } else if (data == 0x80) { // MPKA_ECPUB_ATTEST
-            apple_a7iop_interrupt_status_push(
-                APPLE_A7IOP(sep)->iop_mailbox,
-                0x1000A); // ack first interrupt/0xA
-            // apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
-            // 0x1000B); // ack second interrupt/0xB
-            apple_a7iop_interrupt_status_push(
-                APPLE_A7IOP(sep)->iop_mailbox,
-                0x1000C); // ack third interrupt/0xC
-        }
-        goto jump_default;
+        s->command = data;
+        // PKA commands get executed directly, without additional trigger
+        pka_handle_cmd(s);
+        //qemu_bh_schedule(s->command_bh);
+        goto jump_log;
     case 0x4: // maybe status_out0
 #if 1
         s->status0 = data;
@@ -2709,37 +2742,38 @@ static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
             // unknown
         }
 #endif
-        goto jump_default;
+        goto jump_log;
     case 0x40: // img4out DGST locked
         s->img4out_dgst_locked |= (data & 1);
-        goto jump_default;
+        goto jump_log;
     case 0x60 ... 0x7C: // img4out DGST data
         if (!s->img4out_dgst_locked) {
             memcpy(&s->img4out_dgst[addr & 0x1F], &data, 4);
         }
-        goto jump_default;
+        goto jump_log;
     case 0x80 ... 0x9C: // some data
-        goto jump_default;
+        goto jump_log;
     case 0x800: // chip revision locked
         s->chip_revision_locked |= (data & 1);
-        goto jump_default;
+        goto jump_log;
     case 0x820: // chip revision data
         if (!s->chip_revision_locked) {
             s->chip_revision = data;
         }
-        goto jump_default;
+        goto jump_log;
     case 0x840: // ecid chipid misc locked
         s->ecid_chipid_misc_locked |= (data & 1);
-        goto jump_default;
+        goto jump_log;
     case 0x860 ... 0x870: // ecid chipid misc data ; 0x860/0x864 ecid, 0x870
                           // chipid
         if (!s->ecid_chipid_misc_locked) {
             memcpy(&s->ecid_chipid_misc[(addr & 0x1F) >> 2], &data, 4);
         }
-        goto jump_default;
+        goto jump_log;
     default:
-        memcpy(&sep->pka_base_regs[addr], &data, size);
     jump_default:
+        memcpy(&sep->pka_base_regs[addr], &data, size);
+    jump_log:
         DPRINTF("SEP PKA_BASE: Unknown write at 0x" HWADDR_FMT_plx
                 " with value 0x%" PRIX64 "\n",
                 addr, data);
@@ -2770,29 +2804,30 @@ static uint64_t pka_base_reg_read(void *opaque, hwaddr addr, unsigned size)
             s->status_in0 = 0;
         }
 #endif
-        goto jump_default;
+        goto jump_log;
     case 0x40: // img4out DGST locked
         ret = s->img4out_dgst_locked;
-        goto jump_default;
+        goto jump_log;
     case 0x60 ... 0x7C: // img4out DGST data
         memcpy(&ret, &s->img4out_dgst[addr & 0x1F], 4);
-        goto jump_default;
+        goto jump_log;
     case 0x800: // chip revision locked
         ret = s->chip_revision_locked;
-        goto jump_default;
+        goto jump_log;
     case 0x820: // chip revision data
         ret = s->chip_revision;
-        goto jump_default;
+        goto jump_log;
     case 0x840: // ecid chipid misc locked
         ret = s->ecid_chipid_misc_locked;
-        goto jump_default;
+        goto jump_log;
     case 0x860 ... 0x870: // ecid chipid misc data
         memcpy(&ret, &s->ecid_chipid_misc[(addr & 0x1F) >> 2], 4);
         // memcpy(&ret, &s->ecid_chipid_misc + (addr & 0x1F), 4);
-        goto jump_default;
+        goto jump_log;
     default:
-        memcpy(&ret, &sep->pka_base_regs[addr], size);
     jump_default:
+        memcpy(&ret, &sep->pka_base_regs[addr], size);
+    jump_log:
         DPRINTF("SEP PKA_BASE: Unknown read at 0x" HWADDR_FMT_plx
                 " with value 0x%" PRIX64 "\n",
                 addr, ret);
@@ -2824,10 +2859,11 @@ static void pka_tmm_reg_write(void *opaque, hwaddr addr, uint64_t data,
     switch (addr) {
     case 0x818 ... 0x834: // some data
         // correct?
-        goto jump_default;
+        goto jump_log;
     default:
-        memcpy(&s->pka_tmm_regs[addr], &data, size);
     jump_default:
+        memcpy(&s->pka_tmm_regs[addr], &data, size);
+    jump_log:
         DPRINTF("SEP PKA_TMM: Unknown write at 0x" HWADDR_FMT_plx
                 " with value 0x%" PRIX64 "\n",
                 addr, data);
@@ -2846,10 +2882,11 @@ static uint64_t pka_tmm_reg_read(void *opaque, hwaddr addr, unsigned size)
     switch (addr) {
     case 0x818 ... 0x834:
         // TODO
-        goto jump_default;
+        goto jump_log;
     default:
-        memcpy(&ret, &s->pka_tmm_regs[addr], size);
     jump_default:
+        memcpy(&ret, &s->pka_tmm_regs[addr], size);
+    jump_log:
         DPRINTF("SEP PKA_TMM: Unknown read at 0x" HWADDR_FMT_plx
                 " with value 0x%" PRIX64 "\n",
                 addr, ret);
@@ -3268,6 +3305,7 @@ static void apple_sep_cpu_moni_jump(CPUState *cpu, run_on_cpu_data data)
         arm_rebuild_hflags(&arm_cpu->env);
         tlb_flush(cpu);
         tb_flush(cpu);
+        smp_wmb();
     }
 }
 
@@ -3538,6 +3576,10 @@ AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
     g_assert_nonnull(s->ool_as);
     address_space_init(s->ool_as, s->ool_mr, "sep.ool");
 #endif
+
+    // No async necessary for TRNG?
+    s->aess_state.command_bh = aio_bh_new(qemu_get_aio_context(), aess_handle_cmd_bh, &s->aess_state);
+    s->pka_state.command_bh = aio_bh_new(qemu_get_aio_context(), pka_handle_cmd_bh, &s->pka_state); // unused yet
 
     return s;
 }
