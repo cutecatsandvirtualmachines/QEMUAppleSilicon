@@ -2172,13 +2172,8 @@ static bool check_register_0x18_KEYDISABLE_BIT_INVALID(uint32_t cmd, uint32_t re
 
 static void aess_handle_cmd(AppleAESSState *s)
 {
-    uint32_t cmd, reg_0x18_keydisable;
-    // comment this and the second one below out when not using async
-    // if using QEMU_LOCK_GUARD (non-WITH_) in write
-    WITH_QEMU_LOCK_GUARD(&s->lock) {
-        cmd = s->command;
-        reg_0x18_keydisable = s->reg_0x18_keydisable;
-    }
+    uint32_t cmd = s->command;
+    uint32_t reg_0x18_keydisable = s->reg_0x18_keydisable;
 
     bool keyselect_non_gid0 =
         SEP_AESS_CMD_FLAG_KEYSELECT_GID1_CUSTOM(cmd) != 0;
@@ -2406,7 +2401,7 @@ static void aess_handle_cmd(AppleAESSState *s)
     }
 
 jump_return:
-    // comment this and the first one above out when not using async
+    // comment this out when not using async
     // if using QEMU_LOCK_GUARD (non-WITH_) in write
     WITH_QEMU_LOCK_GUARD(&s->lock) {
         invalid_parameters |= !valid_command;
