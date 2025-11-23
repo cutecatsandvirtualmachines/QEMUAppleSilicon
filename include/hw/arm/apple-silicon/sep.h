@@ -81,6 +81,7 @@ typedef struct {
 typedef struct {
     AppleSEPState *sep;
     QEMUBH *command_bh;
+    QemuMutex lock;
     uint32_t chip_id;
     uint32_t status; // 0x4
     uint32_t command; // 0x8
@@ -128,6 +129,7 @@ typedef struct {
 typedef struct {
     AppleSEPState *sep;
     QEMUBH *command_bh;
+    QemuMutex lock;
     uint32_t command; // 0x0
     uint32_t status0; // 0x4
     uint32_t status_in0; // 0x8

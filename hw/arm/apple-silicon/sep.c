@@ -2042,12 +2042,13 @@ static void aess_raise_interrupt(AppleAESSState *s)
 // For the PKA ECDH command, reuse code from SSC.
 
 static void aess_keywrap_uid(AppleAESSState *s, uint8_t *in, uint8_t *out,
-                             QCryptoCipherAlgo cipher_alg)
+                             QCryptoCipherAlgo cipher_alg, uint32_t cmd,
+                             uint32_t reg_0x18_keydisable)
 { // for keywrap only
     // TODO: Second half of output might be CMAC!!!
     g_assert_cmpuint(cipher_alg, ==, QCRYPTO_CIPHER_ALGO_AES_256);
     QCryptoCipher *cipher;
-    uint32_t normalized_cmd = SEP_AESS_CMD_WITHOUT_FLAGS(s->command);
+    uint32_t normalized_cmd = SEP_AESS_CMD_WITHOUT_FLAGS(cmd);
     size_t key_len = qcrypto_cipher_get_key_len(cipher_alg);
     size_t data_len = 0x20;
     g_assert_cmpuint(data_len, ==, 0x20);
@@ -2068,12 +2069,12 @@ static void aess_keywrap_uid(AppleAESSState *s, uint8_t *in, uint8_t *out,
     // in the same output keys.
     xor_32bit_value(&used_key[0x10], s->reg_0x14_keywrap_iterations_counter,
                     0x8 / 4); // seed_bits are only for keywrap
-    DPRINTF("%s: s->command: 0x%02x normalized_cmd: 0x%02x cipher_alg: %u; "
+    DPRINTF("%s: cmd: 0x%02x normalized_cmd: 0x%02x cipher_alg: %u; "
             "key_len: %lu; iterations: %u, seed_bits: 0x%02x, "
             "reg_0x18_keydisable: 0x%02x\n",
-            __func__, s->command, normalized_cmd, cipher_alg, key_len,
+            __func__, cmd, normalized_cmd, cipher_alg, key_len,
             s->reg_0x14_keywrap_iterations_counter, s->seed_bits,
-            s->reg_0x18_keydisable);
+            reg_0x18_keydisable);
     HEXDUMP("aess_keywrap_uid: used_key", used_key, sizeof(used_key));
     HEXDUMP("aess_keywrap_uid: in", in, data_len);
     cipher = qcrypto_cipher_new(cipher_alg, QCRYPTO_CIPHER_MODE_CBC, used_key,
@@ -2127,17 +2128,14 @@ static int aess_get_custom_keywrap_index(uint32_t cmd)
     }
 }
 
-static bool check_register_0x18_KEYDISABLE_BIT_INVALID(AppleAESSState *s)
+static bool check_register_0x18_KEYDISABLE_BIT_INVALID(uint32_t cmd, uint32_t reg_0x18_keydisable)
 {
-    ////uint32_t normalized_cmd = SEP_AESS_CMD_WITHOUT_FLAGS(s->command);
-    ////uint32_t cmd = s->command;
-    uint32_t cmd = SEP_AESS_CMD_WITHOUT_KEYSIZE(s->command);
-    bool reg_0x18_keydisable_bit0 = (s->reg_0x18_keydisable & 0x1) != 0;
-    bool reg_0x18_keydisable_bit1 = (s->reg_0x18_keydisable & 0x2) != 0;
-    bool reg_0x18_keydisable_bit3 = (s->reg_0x18_keydisable & 0x8) != 0;
-    bool reg_0x18_keydisable_bit4 = (s->reg_0x18_keydisable & 0x10) != 0;
-    ////switch (normalized_cmd)
-    switch (cmd) {
+    uint32_t cmd_without_keysize = SEP_AESS_CMD_WITHOUT_KEYSIZE(cmd);
+    bool reg_0x18_keydisable_bit0 = (reg_0x18_keydisable & 0x1) != 0;
+    bool reg_0x18_keydisable_bit1 = (reg_0x18_keydisable & 0x2) != 0;
+    bool reg_0x18_keydisable_bit3 = (reg_0x18_keydisable & 0x8) != 0;
+    bool reg_0x18_keydisable_bit4 = (reg_0x18_keydisable & 0x10) != 0;
+    switch (cmd_without_keysize) {
     // case 0x: // driver_op == 0x09 (cmd 0x00, invalid)
     case 0x0C:
     case 0x4C:
@@ -2174,17 +2172,25 @@ static bool check_register_0x18_KEYDISABLE_BIT_INVALID(AppleAESSState *s)
 
 static void aess_handle_cmd(AppleAESSState *s)
 {
+    uint32_t cmd, reg_0x18_keydisable;
+    // comment this and the second one below out when not using async
+    // if using QEMU_LOCK_GUARD (non-WITH_) in write
+    WITH_QEMU_LOCK_GUARD(&s->lock) {
+        cmd = s->command;
+        reg_0x18_keydisable = s->reg_0x18_keydisable;
+    }
+
     bool keyselect_non_gid0 =
-        SEP_AESS_CMD_FLAG_KEYSELECT_GID1_CUSTOM(s->command) != 0;
-    bool keyselect_gid1 = (s->command & SEP_AESS_CMD_FLAG_KEYSELECT_GID1) != 0;
+        SEP_AESS_CMD_FLAG_KEYSELECT_GID1_CUSTOM(cmd) != 0;
+    bool keyselect_gid1 = (cmd & SEP_AESS_CMD_FLAG_KEYSELECT_GID1) != 0;
     bool keyselect_custom =
-        (s->command & SEP_AESS_CMD_FLAG_KEYSELECT_CUSTOM) != 0;
-    uint32_t normalized_cmd = SEP_AESS_CMD_WITHOUT_FLAGS(s->command);
-    QCryptoCipherAlgo cipher_alg = get_aes_cipher_alg(s->command);
+        (cmd & SEP_AESS_CMD_FLAG_KEYSELECT_CUSTOM) != 0;
+    uint32_t normalized_cmd = SEP_AESS_CMD_WITHOUT_FLAGS(cmd);
+    QCryptoCipherAlgo cipher_alg = get_aes_cipher_alg(cmd);
     size_t key_len = qcrypto_cipher_get_key_len(cipher_alg);
     bool zero_iv_two_blocks_encryption = false;
     bool register_0x18_KEYDISABLE_BIT_INVALID =
-        check_register_0x18_KEYDISABLE_BIT_INVALID(s);
+        check_register_0x18_KEYDISABLE_BIT_INVALID(cmd, reg_0x18_keydisable);
     bool valid_command = true;
     bool invalid_parameters = register_0x18_KEYDISABLE_BIT_INVALID;
 #if 1
@@ -2220,7 +2226,8 @@ static void aess_handle_cmd(AppleAESSState *s)
         /// false);
         // aess_keywrap_uid(s, key_wrap_data_in, key_wrap_data_out, cipher_alg,
         // true);
-        aess_keywrap_uid(s, key_wrap_data_in, key_wrap_data_out, cipher_alg);
+        aess_keywrap_uid(s, key_wrap_data_in, key_wrap_data_out, cipher_alg,
+                         cmd, reg_0x18_keydisable);
         // qemu_guest_getrandom_nofail(key_wrap_data_out, sizeof(
         // key_wrap_data_out)); // For testing if random output breaks stuff.
         memcpy(s->out_full, key_wrap_data_out, key_len);
@@ -2235,7 +2242,7 @@ static void aess_handle_cmd(AppleAESSState *s)
             SEP_AESS_COMMAND_ENCRYPT_CBC_ONLY_NONCUSTOM_FORCE_CUSTOM_AES256) /* GID0 || GID1 || Custom */
     {
         bool custom_encryption = false;
-        DPRINTF("%s: s->command 0x%03x ; ", __func__, s->command);
+        DPRINTF("%s: cmd 0x%03x ; ", __func__, cmd);
         HEXDUMP("s->in_full", s->in_full, sizeof(s->in_full));
         if (normalized_cmd ==
             SEP_AESS_COMMAND_ENCRYPT_CBC_ONLY_NONCUSTOM_FORCE_CUSTOM_AES256) {
@@ -2261,7 +2268,7 @@ static void aess_handle_cmd(AppleAESSState *s)
         uint8_t used_key[0x20] = { 0 };
         if (custom_encryption) {
             int custom_keywrap_index =
-                aess_get_custom_keywrap_index(s->command & 0xFF);
+                aess_get_custom_keywrap_index(cmd & 0xFF);
             if (s->custom_key_index_enabled[custom_keywrap_index]) {
                 memcpy(used_key, s->custom_key_index[custom_keywrap_index],
                        sizeof(used_key));
@@ -2304,7 +2311,7 @@ static void aess_handle_cmd(AppleAESSState *s)
                 &error_abort); // sizeof(iv) == 0x10 on 256 and 128
             qcrypto_cipher_encrypt(cipher, s->in_full, s->out_full,
                                    sizeof(s->in_full), &error_abort);
-            // if ((s->command & 0xF) == 0x9)
+            // if ((cmd & 0xF) == 0x9)
         } else if (do_encryption) {
             qcrypto_cipher_setiv(
                 cipher, iv, sizeof(iv),
@@ -2373,7 +2380,7 @@ static void aess_handle_cmd(AppleAESSState *s)
     // 0x248/0x2C8(0x2C1)
     else if (normalized_cmd == 0x1) {
         int custom_keywrap_index =
-            aess_get_custom_keywrap_index(s->command & 0xFF);
+            aess_get_custom_keywrap_index(cmd & 0xFF);
         memcpy(s->custom_key_index[custom_keywrap_index], s->in_full,
                sizeof(s->custom_key_index[custom_keywrap_index]));
         // unset (real zero-key) != zero-key set (not real zero-key)
@@ -2381,8 +2388,8 @@ static void aess_handle_cmd(AppleAESSState *s)
                         0x20 / 4);
         s->custom_key_index_enabled[custom_keywrap_index] = true;
         DPRINTF("SEP AESS_BASE: %s: sync/set key command 0x%02x "
-                "s->command 0x%02x\n",
-                __func__, normalized_cmd, s->command);
+                "cmd 0x%02x\n",
+                __func__, normalized_cmd, cmd);
     }
 #endif
 // TODO: other sync commands: 0x205(0x201), 0x204(0x281), 0x245(0x241),
@@ -2394,20 +2401,24 @@ static void aess_handle_cmd(AppleAESSState *s)
 #endif
     else {
         DPRINTF("SEP AESS_BASE: %s: Unknown command 0x%02x\n", __func__,
-                s->command);
+                cmd);
         // valid_command = false;
     }
 
 jump_return:
-    invalid_parameters |= !valid_command;
-    if (invalid_parameters) {
-        // always keep this flag
-        s->interrupt_status |= SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT;
+    // comment this and the first one above out when not using async
+    // if using QEMU_LOCK_GUARD (non-WITH_) in write
+    WITH_QEMU_LOCK_GUARD(&s->lock) {
+        invalid_parameters |= !valid_command;
+        if (invalid_parameters) {
+            // always keep this flag
+            s->interrupt_status |= SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT;
+        }
+        s->status &= ~SEP_AESS_REGISTER_STATUS_ACTIVE;
+        // call raise_interrupt always instead of only on keywrap, because it's
+        // checking conditions
+        aess_raise_interrupt(s);
     }
-    s->status &= ~SEP_AESS_REGISTER_STATUS_ACTIVE;
-    // call raise_interrupt always instead of only on keywrap, because it's
-    // checking conditions
-    aess_raise_interrupt(s);
 }
 
 static void aess_handle_cmd_bh(void *opaque) {
@@ -2422,17 +2433,21 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     AppleSEPState *sep = s->sep;
     uint64_t orig_data = data;
 
+    //QEMU_LOCK_GUARD(&s->lock);
+
 #ifdef ENABLE_CPU_DUMP_STATE
     DPRINTF("\n");
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
     switch (addr) {
     case SEP_AESS_REGISTER_STATUS: // Status
-        s->status = data; // surely no bitwise OR?
-        if ((s->status & SEP_AESS_REGISTER_STATUS_RUN_COMMAND) != 0) {
-            s->status &= ~SEP_AESS_REGISTER_STATUS_RUN_COMMAND;
-            s->status |= SEP_AESS_REGISTER_STATUS_ACTIVE;
-            s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
+        if ((data & SEP_AESS_REGISTER_STATUS_RUN_COMMAND) != 0) {
+            data &= ~SEP_AESS_REGISTER_STATUS_RUN_COMMAND;
+            data |= SEP_AESS_REGISTER_STATUS_ACTIVE;
+            WITH_QEMU_LOCK_GUARD(&s->lock) {
+                s->status = data; // surely no bitwise OR?
+                s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
+            }
             //aess_handle_cmd(s);
             qemu_bh_schedule(s->command_bh);
         }
@@ -2442,8 +2457,10 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         s->command = data;
         goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_STATUS: // Interrupt Status
-        if ((data & SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE) != 0) {
-            s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
+        WITH_QEMU_LOCK_GUARD(&s->lock) {
+            if ((data & SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE) != 0) {
+                s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
+            }
         }
         goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_ENABLED: // Interrupt Enabled
@@ -2503,19 +2520,25 @@ static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     AppleSEPState *sep = s->sep;
     uint64_t ret = 0;
 
+    //QEMU_LOCK_GUARD(&s->lock);
+
 #ifdef ENABLE_CPU_DUMP_STATE
     DPRINTF("\n");
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
     switch (addr) {
     case SEP_AESS_REGISTER_STATUS: // Status
-        ret = s->status;
+        WITH_QEMU_LOCK_GUARD(&s->lock) {
+            ret = s->status;
+        }
         goto jump_log;
     case SEP_AESS_REGISTER_COMMAND: // Command
         ret = s->command;
         goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_STATUS: // Interrupt Status
-        ret = s->interrupt_status;
+        WITH_QEMU_LOCK_GUARD(&s->lock) {
+            ret = s->interrupt_status;
+        }
         goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_ENABLED: // Interrupt Enabled
         ret = s->interrupt_enabled;
@@ -2717,6 +2740,8 @@ static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     ApplePKAState *s = opaque;
     AppleSEPState *sep = s->sep;
 
+    QEMU_LOCK_GUARD(&s->lock);
+
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
 #endif
@@ -2786,6 +2811,8 @@ static uint64_t pka_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     ApplePKAState *s = opaque;
     AppleSEPState *sep = s->sep;
     uint64_t ret = 0;
+
+    QEMU_LOCK_GUARD(&s->lock);
 
 #ifdef ENABLE_CPU_DUMP_STATE
     cpu_dump_state(CPU(sep->cpu), stderr, CPU_DUMP_CODE);
@@ -3576,6 +3603,9 @@ AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
     g_assert_nonnull(s->ool_as);
     address_space_init(s->ool_as, s->ool_mr, "sep.ool");
 #endif
+
+    qemu_mutex_init(&s->aess_state.lock);
+    qemu_mutex_init(&s->pka_state.lock);
 
     // No async necessary for TRNG?
     s->aess_state.command_bh = aio_bh_new(qemu_get_aio_context(), aess_handle_cmd_bh, &s->aess_state);
