@@ -2443,8 +2443,8 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                 s->status = data; // surely no bitwise OR?
                 s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
             }
-            //aess_handle_cmd(s);
-            qemu_bh_schedule(s->command_bh);
+            aess_handle_cmd(s);
+            //qemu_bh_schedule(s->command_bh);
         }
         goto jump_log;
     case SEP_AESS_REGISTER_COMMAND: // Command
