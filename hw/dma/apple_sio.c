@@ -645,6 +645,12 @@ static int vmstate_apple_sio_dma_endpoint_post_load(void *opaque,
     s = container_of(ep, AppleSIOState, eps[ep->id]);
 
     QTAILQ_FOREACH (req, &ep->requests, next) {
+        qemu_sglist_init(&req->sgl, DEVICE(s), req->segment_count, &s->dma_as);
+        for (uint32_t i = 0; i < req->segment_count; ++i) {
+            qemu_sglist_add(&req->sgl, req->segments[i].addr,
+                            req->segments[i].len);
+        }
+
         if (req->mapped) {
             req->mapped = false;
             bytes_accessed = req->bytes_accessed;
