@@ -209,7 +209,7 @@ static void apple_sio_destroy_req(AppleSIOState *s, AppleSIODMAEndpoint *ep,
 
     if (req->mapped) {
         unmap_length = req->bytes_accessed;
-        for (i = 0; i < req->iov.niov; i++) {
+        for (i = 0; i < req->iov.niov; ++i) {
             access_len = req->iov.iov[i].iov_len;
             if (access_len > unmap_length) {
                 access_len = unmap_length;
@@ -560,7 +560,7 @@ static void apple_sio_realize(DeviceState *dev, Error **errp)
     g_assert_nonnull(s->dma_mr);
     address_space_init(&s->dma_as, s->dma_mr, "sio.dma-as");
 
-    for (int i = 0; i < SIO_NUM_EPS; i++) {
+    for (int i = 0; i < SIO_NUM_EPS; ++i) {
         s->eps[i].id = i;
         s->eps[i].direction =
             (i & 1) ? DMA_DIRECTION_FROM_DEVICE : DMA_DIRECTION_TO_DEVICE;
@@ -586,7 +586,7 @@ static void apple_sio_reset_hold(Object *obj, ResetType type)
     memset(s->params, 0, sizeof(s->params));
     s->params[PARAM_PROTOCOL] = protocol;
 
-    for (int i = 0; i < SIO_NUM_EPS; i++) {
+    for (int i = 0; i < SIO_NUM_EPS; ++i) {
         apple_sio_stop(s, &s->eps[i]);
 
         memset(&s->eps[i].config, 0, sizeof(s->eps[i].config));

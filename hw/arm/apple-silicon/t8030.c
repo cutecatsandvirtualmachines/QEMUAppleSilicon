@@ -200,7 +200,7 @@ static void t8030_start_cpus(AppleT8030MachineState *t8030, uint64_t cpu_mask)
 {
     int i;
 
-    for (i = 0; i < t8030_real_cpu_count(t8030); i++) {
+    for (i = 0; i < t8030_real_cpu_count(t8030); ++i) {
         if ((cpu_mask & BIT_ULL(i)) != 0) {
             apple_a13_set_on(t8030->cpus[i]);
         }
@@ -663,7 +663,7 @@ static void t8030_memory_setup(AppleT8030MachineState *t8030)
 
     g_free(cmdline);
 
-    for (int i = 0; i < AMCC_PLANE_COUNT; i++) {
+    for (int i = 0; i < AMCC_PLANE_COUNT; ++i) {
         AMCC_WREG32(t8030, AMCC_PLANE_LOWER_LIMIT(i),
                     (info->trustcache_addr - info->dram_base) >> 14);
         AMCC_WREG32(t8030, AMCC_PLANE_UPPER_LIMIT(i),
@@ -919,7 +919,7 @@ static const MemoryRegionOps amcc_reg_ops = {
 
 static void t8030_cluster_setup(AppleT8030MachineState *t8030)
 {
-    for (int i = 0; i < A13_MAX_CLUSTER; i++) {
+    for (int i = 0; i < A13_MAX_CLUSTER; ++i) {
         char *name = NULL;
 
         name = g_strdup_printf("cluster%d", i);
@@ -932,7 +932,7 @@ static void t8030_cluster_setup(AppleT8030MachineState *t8030)
 
 static void t8030_cluster_realize(AppleT8030MachineState *t8030)
 {
-    for (int i = 0; i < A13_MAX_CLUSTER; i++) {
+    for (int i = 0; i < A13_MAX_CLUSTER; ++i) {
         qdev_realize(DEVICE(&t8030->clusters[i]), NULL, &error_fatal);
     }
 }
@@ -949,7 +949,7 @@ static void t8030_cpu_setup(AppleT8030MachineState *t8030)
     root = apple_dt_get_node(t8030->device_tree, "cpus");
     g_assert_nonnull(root);
 
-    for (iter = root->children, i = 0; iter; iter = next, i++) {
+    for (iter = root->children, i = 0; iter; iter = next, ++i) {
         uint32_t cluster_id;
         AppleDTNode *node;
 
@@ -996,7 +996,7 @@ static void t8030_create_aic(AppleT8030MachineState *t8030)
 
     reg = (hwaddr *)prop->data;
 
-    for (i = 0; i < t8030_real_cpu_count(t8030); i++) {
+    for (i = 0; i < t8030_real_cpu_count(t8030); ++i) {
         memory_region_add_subregion_overlap(
             &t8030->cpus[i]->memory, t8030->armio_base + reg[0],
             sysbus_mmio_get_region(t8030->aic, i), 0);
@@ -1172,7 +1172,7 @@ static void t8030_create_dart(AppleT8030MachineState *t8030, const char *name,
 
     reg = (uint64_t *)prop->data;
 
-    for (i = 0; i < prop->len / 16; i++) {
+    for (i = 0; i < prop->len / 16; ++i) {
         sysbus_mmio_map(SYS_BUS_DEVICE(dart), i,
                         (absolute_mmio ? 0 : t8030->armio_base) + reg[i * 2]);
     }
@@ -1181,7 +1181,7 @@ static void t8030_create_dart(AppleT8030MachineState *t8030, const char *name,
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
 
-    for (i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(SYS_BUS_DEVICE(dart), i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1255,7 +1255,7 @@ static void t8030_create_ans(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < 4; ++i) {
         sysbus_mmio_map(ans, i, t8030->armio_base + reg[i << 1]);
     }
 
@@ -1264,7 +1264,7 @@ static void t8030_create_ans(AppleT8030MachineState *t8030)
     g_assert_cmpuint(prop->len, ==, 20);
     ints = (uint32_t *)prop->data;
 
-    for (i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(ans, i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1346,7 +1346,7 @@ static void t8030_create_gpio(AppleT8030MachineState *t8030, const char *name)
 
     ints = (uint32_t *)prop->data;
 
-    for (i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(SYS_BUS_DEVICE(gpio), i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1526,7 +1526,7 @@ static void t8030_create_usb(AppleT8030MachineState *t8030)
     prop = apple_dt_get_prop(drd, "interrupts");
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; ++i) {
         sysbus_connect_irq(SYS_BUS_DEVICE(atc), i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1562,7 +1562,7 @@ static void t8030_create_wdt(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
 
-    for (i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(wdt, i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1757,7 +1757,7 @@ static void t8030_create_smc(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
-    for (i = 0; i < prop->len / 16; i++) {
+    for (i = 0; i < prop->len / 16; ++i) {
         sysbus_mmio_map(smc, i, t8030->armio_base + reg[i * 2]);
     }
 
@@ -1769,7 +1769,7 @@ static void t8030_create_smc(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
 
-    for (i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(smc, i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1805,7 +1805,7 @@ static void t8030_create_sio(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < 2; ++i) {
         sysbus_mmio_map(sio, i, t8030->armio_base + reg[i * 2]);
     }
 
@@ -1813,7 +1813,7 @@ static void t8030_create_sio(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
 
-    for (i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(sio, i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1909,12 +1909,12 @@ static void t8030_create_pcie(AppleT8030MachineState *t8030)
 #define PORT_ENTRIES 4
 
     // TODO: Hook up all ports
-    for (i = 0; i < ROOT_MAPPINGS; i++) {
+    for (i = 0; i < ROOT_MAPPINGS; ++i) {
         ////sysbus_mmio_map(pcie, (PORT_COUNT * PORT_MAPPINGS) + i, reg[i * 2]);
         sysbus_mmio_map(pcie, i, reg[i * 2]);
     }
 #if 0
-    for (i = 0; i < PORT_COUNT; i++) {
+    for (i = 0; i < PORT_COUNT; ++i) {
         snprintf(temp_name, sizeof(temp_name), "port%u_config", i);
         create_unimplemented_device(temp_name, reg[(6 + (i * PORT_ENTRIES) + 0) * 2 + 0], reg[(6 + (i * PORT_ENTRIES) + 0) * 2 + 1]);
         snprintf(temp_name, sizeof(temp_name), "port%u_config_ltssm_debug", i);
@@ -1929,7 +1929,7 @@ static void t8030_create_pcie(AppleT8030MachineState *t8030)
     port_index = 6;
     port_entries = 4;
     // this has to come later, as root and port phy's will overlap otherwise
-    for (i = 0; i < PORT_COUNT; i++) {
+    for (i = 0; i < PORT_COUNT; ++i) {
         sysbus_mmio_map(pcie, ROOT_MAPPINGS + (i * PORT_MAPPINGS) + 0, reg[(port_index + (i * port_entries) + 0) * 2 + 0]);
         sysbus_mmio_map(pcie, ROOT_MAPPINGS + (i * PORT_MAPPINGS) + 1, reg[(port_index + (i * port_entries) + 2) * 2 + 0]);
         sysbus_mmio_map(pcie, ROOT_MAPPINGS + (i * PORT_MAPPINGS) + 2, reg[(port_index + (i * port_entries) + 3) * 2 + 0]);
@@ -1942,7 +1942,7 @@ static void t8030_create_pcie(AppleT8030MachineState *t8030)
     ints = (uint32_t *)prop->data;
     int interrupts_count = prop->len / sizeof(uint32_t);
 
-    for (i = 0; i < interrupts_count; i++) {
+    for (i = 0; i < interrupts_count; ++i) {
         sysbus_connect_irq(pcie, i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -1950,7 +1950,7 @@ static void t8030_create_pcie(AppleT8030MachineState *t8030)
         apple_dt_get_prop_u32(child, "msi-vector-offset", &error_fatal);
     uint32_t msi_vectors =
         apple_dt_get_prop_u32(child, "#msi-vectors", &error_fatal);
-    for (i = 0; i < msi_vectors; i++) {
+    for (i = 0; i < msi_vectors; ++i) {
         sysbus_connect_irq(
             pcie, interrupts_count + i,
             qdev_get_gpio_in(DEVICE(t8030->aic), msi_vector_offset + i));
@@ -2060,7 +2060,7 @@ static void t8030_create_display(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     uint32_t *ints = (uint32_t *)prop->data;
 
-    for (size_t i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (size_t i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(sbd, i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -2147,7 +2147,7 @@ static void t8030_create_sep(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
 
-    for (int i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (int i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(SYS_BUS_DEVICE(sep), i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -2184,7 +2184,7 @@ static void t8030_create_sep_sim(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
 
-    for (int i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (int i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(SYS_BUS_DEVICE(sep), i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -2280,7 +2280,7 @@ static void t8030_create_aop(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     reg = (uint64_t *)prop->data;
 
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < 2; ++i) {
         sysbus_mmio_map(aop, i, t8030->armio_base + reg[i * 2]);
     }
 
@@ -2288,7 +2288,7 @@ static void t8030_create_aop(AppleT8030MachineState *t8030)
     g_assert_nonnull(prop);
     ints = (uint32_t *)prop->data;
 
-    for (i = 0; i < prop->len / sizeof(uint32_t); i++) {
+    for (i = 0; i < prop->len / sizeof(uint32_t); ++i) {
         sysbus_connect_irq(aop, i,
                            qdev_get_gpio_in(DEVICE(t8030->aic), ints[i]));
     }
@@ -2649,7 +2649,7 @@ static void t8030_init(MachineState *machine)
     t8030_cpu_setup(t8030);
     t8030_create_aic(t8030);
 
-    for (int i = 0; i < NUM_UARTS; i++) {
+    for (int i = 0; i < NUM_UARTS; ++i) {
         t8030_create_s3c_uart(t8030, i, serial_hd(i));
     }
 
