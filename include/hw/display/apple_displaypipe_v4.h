@@ -20,7 +20,6 @@
 #define APPLE_DISPLAYPIPE_V4_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/boot.h"
 #include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 #include "qom/object.h"

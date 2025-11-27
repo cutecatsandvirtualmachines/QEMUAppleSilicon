@@ -24,10 +24,18 @@
 #include "hw/irq.h"
 #include "hw/qdev-properties.h"
 #include "migration/vmstate.h"
+#include "qemu/cutils.h"
 #include "qemu/log.h"
 #include "ui/console.h"
 #include "framebuffer.h"
+#include "pixman.h"
 #include "system/dma.h"
+
+#ifdef CONFIG_PNG
+#include <png.h>
+#else
+#error "PNG support is required"
+#endif
 
 #if 0
 #define ADP_INFO(fmt, ...) fprintf(stderr, fmt "\n", __VA_ARGS__)
@@ -124,6 +132,12 @@ struct AppleDisplayPipeV4State {
     QemuConsole *console;
     QEMUBH *update_disp_image_bh;
     bool invalidated;
+    uint32_t *boot_splash;
+    pixman_image_t *boot_splash_image;
+    uint32_t boot_splash_width;
+    uint32_t boot_splash_height;
+    uint32_t boot_splash_size;
+    QEMUTimer *boot_splash_timer;
 };
 
 #define REG_CONTROL_INT_STATUS (0x45818)
@@ -601,6 +615,43 @@ static void adp_v4_update_disp_image_ptr(AppleDisplayPipeV4State *s)
     s->disp_image = pixman_image_create_bits(PIXMAN_a8r8g8b8, s->width,
                                              s->height, adp_v4_get_ram_ptr(s),
                                              s->width * sizeof(uint32_t));
+
+    qemu_pixman_image_unref(s->boot_splash_image);
+    s->boot_splash_image = pixman_image_create_bits(
+        PIXMAN_a8b8g8r8, s->boot_splash_width, s->boot_splash_height,
+        (uint32_t *)s->boot_splash, s->boot_splash_width * 4);
+    pixman_transform_t transform;
+    pixman_transform_init_identity(&transform);
+    double dest_width = (double)s->width / 1.5;
+    pixman_transform_scale(
+        &transform, NULL,
+        pixman_double_to_fixed((double)s->boot_splash_width / dest_width),
+        pixman_double_to_fixed((double)s->boot_splash_height / dest_width));
+    pixman_image_set_transform(s->boot_splash_image, &transform);
+    pixman_image_set_filter(s->boot_splash_image, PIXMAN_FILTER_BEST, NULL, 0);
+    pixman_image_set_repeat(s->boot_splash_image, PIXMAN_REPEAT_NONE);
+}
+
+static void adp_v4_draw_boot_splash(AppleDisplayPipeV4State *s)
+{
+    uint32_t dest_width = (double)s->width / 1.5;
+    uint32_t dest_x = s->width / 2 - dest_width / 2;
+    uint32_t dest_y = s->height / 2 - dest_width / 2;
+    pixman_image_composite(PIXMAN_OP_OVER, s->boot_splash_image, NULL,
+                           s->disp_image, 0, 0, 0, 0, dest_x, dest_y,
+                           dest_width, dest_width);
+    for (uint32_t y = 0; y < dest_width; ++y) {
+        adp_v4_set_dirty(s,
+                         (dest_x + (dest_y + y) * s->width) * sizeof(uint32_t),
+                         dest_width * sizeof(uint32_t));
+    }
+}
+
+static void adp_v4_draw_boot_splash_timer(void *opaque)
+{
+    AppleDisplayPipeV4State *s = opaque;
+    QEMU_LOCK_GUARD(&s->lock);
+    adp_v4_draw_boot_splash(s);
 }
 
 static void adp_v4_reset_hold(Object *obj, ResetType type)
@@ -621,6 +672,11 @@ static void adp_v4_reset_hold(Object *obj, ResetType type)
     adp_v4_blend_reset(&s->blend_unit);
 
     adp_v4_blit_rect_black(s, s->width, s->height);
+    adp_v4_draw_boot_splash(s);
+
+    // Workaround for `-v` removing the boot_splash
+    timer_mod(s->boot_splash_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                                        NANOSECONDS_PER_SECOND / 2);
 }
 
 static void adp_v4_realize(DeviceState *dev, Error **errp)
@@ -639,7 +695,7 @@ static const Property adp_v4_props[] = {
 };
 
 static const VMStateDescription vmstate_adp_v4_gp = {
-    .name = "Apple Display Pipe v4 Generic Pixel Pipe State",
+    .name = "ADPV4GenPipeState",
     .version_id = 0,
     .minimum_version_id = 0,
     .fields =
@@ -692,6 +748,12 @@ static const VMStateDescription vmstate_adp_v4 = {
             VMSTATE_STRUCT(blend_unit, AppleDisplayPipeV4State, 0,
                            vmstate_adp_v4_blend_unit, ADPV4BlendUnitState),
             VMSTATE_BOOL(invalidated, AppleDisplayPipeV4State),
+            VMSTATE_UINT32(boot_splash_width, AppleDisplayPipeV4State),
+            VMSTATE_UINT32(boot_splash_height, AppleDisplayPipeV4State),
+            VMSTATE_UINT32(boot_splash_size, AppleDisplayPipeV4State),
+            VMSTATE_VBUFFER_ALLOC_UINT32(boot_splash, AppleDisplayPipeV4State,
+                                         0, NULL, boot_splash_size),
+            VMSTATE_TIMER_PTR(boot_splash_timer, AppleDisplayPipeV4State),
             VMSTATE_END_OF_LIST(),
         },
 };
@@ -859,6 +921,56 @@ SysBusDevice *adp_v4_from_node(AppleDTNode *node, MemoryRegion *dma_mr)
     for (i = 0; i < 9; i++) {
         sysbus_init_irq(sbd, &s->irqs[i]);
     }
+
+    // Boot splash
+    // Please see `ui/icons/CKBrandingNotice.md`
+    char *path = get_relocated_path(
+        CONFIG_QEMU_ICONDIR "/hicolor/512x512/apps/CKQEMUBootSplash@2x.png");
+    g_assert(path != NULL);
+    FILE *fp = fopen(path, "rb");
+    if (fp == NULL) {
+        error_setg(&error_abort, "Missing emulator branding: %s.", path);
+        g_assert_not_reached();
+    }
+    uint8_t sig[8];
+    fread(sig, sizeof(sig), 1, fp);
+    if (png_sig_cmp(sig, 0, sizeof(sig)) != 0) {
+        error_setg(&error_abort, "Invalid emulator branding: %s.", path);
+        g_assert_not_reached();
+    }
+    g_free(path);
+    png_structp png_ptr =
+        png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    g_assert(png_ptr != NULL);
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    g_assert(info_ptr != NULL);
+    png_init_io(png_ptr, fp);
+    png_set_sig_bytes(png_ptr, sizeof(sig));
+
+    png_read_info(png_ptr, info_ptr);
+
+    s->boot_splash_width = png_get_image_width(png_ptr, info_ptr);
+    s->boot_splash_height = png_get_image_height(png_ptr, info_ptr);
+
+    png_read_update_info(png_ptr, info_ptr);
+
+    s->boot_splash =
+        g_new0(uint32_t, s->boot_splash_width * s->boot_splash_height);
+    s->boot_splash_size =
+        s->boot_splash_width * s->boot_splash_height * sizeof(uint32_t);
+
+    png_bytep *row_ptrs = malloc(sizeof(png_bytep) * s->boot_splash_height);
+    for (uint32_t y = 0; y < s->boot_splash_height; y++)
+        row_ptrs[y] = (png_bytep)(s->boot_splash + y * s->boot_splash_width);
+
+    png_read_image(png_ptr, row_ptrs);
+
+    g_free(row_ptrs);
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    fclose(fp);
+
+    s->boot_splash_timer =
+        timer_new_ns(QEMU_CLOCK_VIRTUAL, adp_v4_draw_boot_splash_timer, s);
 
     return sbd;
 }
