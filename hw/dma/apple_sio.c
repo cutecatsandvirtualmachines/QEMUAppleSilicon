@@ -161,15 +161,16 @@ typedef struct QEMU_PACKED {
     };
 } SIOMessage;
 
-static void apple_sio_map_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
+static bool apple_sio_map_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
                               SIODMAMapRequest *req)
 {
     if (req->mapped) {
-        return;
+        return true;
     }
 
     qemu_iovec_init(&req->iov, req->segment_count);
-    for (int i = 0; i < req->segment_count; i++) {
+
+    for (int i = 0; i < req->segment_count; ++i) {
         dma_addr_t base = req->sgl.sg[i].base;
         dma_addr_t len = req->sgl.sg[i].len;
 
@@ -178,9 +179,12 @@ static void apple_sio_map_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
             void *mem = dma_memory_map(&s->dma_as, base, &xlen, ep->direction,
                                        MEMTXATTRS_UNSPECIFIED);
             if (mem == NULL) {
-                qemu_log_mask(LOG_GUEST_ERROR, "%s: unable to map memory\n",
-                              __func__);
-                continue;
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "%s: dma_memory_map failed; req->tag=%d, "
+                              "base=0x%llX, len=0x%llX, ep->direction=%d\n",
+                              __func__, req->tag, base, len, ep->direction);
+                qemu_iovec_destroy(&req->iov);
+                return false;
             }
 
             if (xlen > len) {
@@ -191,7 +195,9 @@ static void apple_sio_map_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
             base += xlen;
         }
     }
+
     req->mapped = true;
+    return true;
 }
 
 static void apple_sio_destroy_req(AppleSIOState *s, AppleSIODMAEndpoint *ep,
@@ -271,7 +277,9 @@ uint64_t apple_sio_dma_read(AppleSIODMAEndpoint *ep, void *buffer, uint64_t len)
         if (req == NULL) {
             break;
         }
-        apple_sio_map_dma(s, ep, req);
+        if (!apple_sio_map_dma(s, ep, req)) {
+            break;
+        }
         iovec_len =
             qemu_iovec_to_buf(&req->iov, req->bytes_accessed, buffer, len);
         req->bytes_accessed += iovec_len;
@@ -303,7 +311,9 @@ uint64_t apple_sio_dma_write(AppleSIODMAEndpoint *ep, void *buffer,
         if (req == NULL) {
             break;
         }
-        apple_sio_map_dma(s, ep, req);
+        if (!apple_sio_map_dma(s, ep, req)) {
+            break;
+        }
         iovec_len =
             qemu_iovec_from_buf(&req->iov, req->bytes_accessed, buffer, len);
         req->bytes_accessed += iovec_len;
