@@ -10142,6 +10142,7 @@ static bool disas_apple_insn(DisasContext *s, uint32_t insn)
         switch (rn) {
             case 1: // GENTER
                 if (s->guarded) {
+                    qemu_log_mask(LOG_UNIMP, "%s: used GENTER while still guarded.\n", __func__);
                     return false;
                 }
                 gen_a64_update_pc(s, 0);
@@ -10150,6 +10151,7 @@ static bool disas_apple_insn(DisasContext *s, uint32_t insn)
                 return true;
             case 0: // GEXIT
                 if (!s->guarded) {
+                    qemu_log_mask(LOG_UNIMP, "%s: used GEXIT while not guarded.\n", __func__);
                     return false;
                 }
                 gen_helper_gexit(tcg_env);

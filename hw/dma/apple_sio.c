@@ -181,7 +181,8 @@ static bool apple_sio_map_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
             if (mem == NULL) {
                 qemu_log_mask(LOG_GUEST_ERROR,
                               "%s: dma_memory_map failed; req->tag=%d, "
-                              "base=0x%llX, len=0x%llX, ep->direction=%d\n",
+                              "base=0x%" HWADDR_PRIX ", len=0x%" HWADDR_PRIX
+                              ", ep->direction=%d\n",
                               __func__, req->tag, base, len, ep->direction);
                 qemu_iovec_destroy(&req->iov);
                 return false;

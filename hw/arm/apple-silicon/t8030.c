@@ -2099,6 +2099,8 @@ static void t8030_create_sep(AppleT8030MachineState *t8030)
     child = apple_dt_get_node(armio, "sep");
     g_assert_nonnull(child);
 
+    apple_dt_set_prop_u32(child, "low-power-enable", 1);
+
     sep = apple_sep_from_node(
         child,
         MEMORY_REGION(apple_dart_iommu_mr(dart, *(uint32_t *)prop->data)),
@@ -2169,6 +2171,8 @@ static void t8030_create_sep_sim(AppleT8030MachineState *t8030)
     g_assert_nonnull(armio);
     child = apple_dt_get_node(armio, "sep");
     g_assert_nonnull(child);
+
+    apple_dt_set_prop_u32(child, "low-power-enable", 1);
 
     sep = apple_sep_sim_from_node(child, true);
     g_assert_nonnull(sep);

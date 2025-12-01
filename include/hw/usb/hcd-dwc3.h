@@ -76,12 +76,13 @@ typedef struct DWC3Transfer {
     int epid;
     uint32_t count;
     uint32_t rsc_idx;
+    bool can_free;
 } DWC3Transfer;
 
 typedef struct DWC3Endpoint {
     USBEndpoint *uep;
     DWC3Transfer *xfer;
-    int epid;
+    uint32_t epid;
     uint32_t epnum;
     uint32_t intrnum;
     uint32_t event_en;
@@ -102,6 +103,7 @@ typedef struct DWC3State {
     XHCISysbusState sysbus_xhci;
     struct DWC3DeviceState device;
     qemu_irq irq;
+    QemuMutex lock;
 
     DWC3EventRing intrs[DWC3_NUM_INTRS];
     uint32_t numintrs;
@@ -183,6 +185,13 @@ typedef struct DWC3State {
 #define depcmd(_ch) depcmdreg[((_ch) << 2) + 3] /* c80c, c81c, ... */
         };
     };
+
+    union {
+        struct usb_control_packet setup_packet;
+        uint64_t setup_packet_u64;
+    };
+    uint32_t last_control_command;
+    bool send_not_ready_control_data;
 } DWC3State;
 
 

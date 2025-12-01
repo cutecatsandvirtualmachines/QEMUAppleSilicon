@@ -3603,8 +3603,8 @@ AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
     qemu_mutex_init(&s->pka_state.lock);
 
     // No async necessary for TRNG?
-    s->aess_state.command_bh = aio_bh_new(qemu_get_aio_context(), aess_handle_cmd_bh, &s->aess_state);
-    s->pka_state.command_bh = aio_bh_new(qemu_get_aio_context(), pka_handle_cmd_bh, &s->pka_state); // unused yet
+    s->aess_state.command_bh = aio_bh_new_guarded(qemu_get_aio_context(), aess_handle_cmd_bh, &s->aess_state, &DEVICE(s)->mem_reentrancy_guard);
+    s->pka_state.command_bh = aio_bh_new_guarded(qemu_get_aio_context(), pka_handle_cmd_bh, &s->pka_state, &DEVICE(s)->mem_reentrancy_guard); // unused yet
 
     return s;
 }
@@ -3953,7 +3953,6 @@ static int kbkdf_generate_key(uint8_t *cmac_key, uint8_t *label,
     return 0;
 }
 
-// TODO: use fully random value if priv == NULL
 static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
                             struct ecc_point *ecc_pub)
 {
