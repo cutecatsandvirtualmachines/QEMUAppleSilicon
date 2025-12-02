@@ -45,7 +45,6 @@
 #include "nettle/ecdsa.h"
 #include "nettle/hkdf.h"
 #include "nettle/hmac.h"
-#include "nettle/knuth-lfib.h"
 #include "system/address-spaces.h"
 #include "system/block-backend-global-state.h"
 #include "system/block-backend-io.h"
@@ -3953,35 +3952,29 @@ static int kbkdf_generate_key(uint8_t *cmac_key, uint8_t *label,
     return 0;
 }
 
-static int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key,
+static int generate_ec_priv(struct AppleSSCState *ssc_state, const char *priv,
+                            struct ecc_scalar *ecc_key,
                             struct ecc_point *ecc_pub)
 {
     const struct ecc_curve *ecc = nettle_get_secp_384r1();
     mpz_t temp1;
-    uint8_t rand_bytes[BYTELEN_384] = { 0 };
 
     ecc_point_init(ecc_pub, ecc);
     ecc_scalar_init(ecc_key, ecc);
 
     if (priv == NULL) {
-        qemu_guest_getrandom_nofail(rand_bytes, sizeof(rand_bytes));
-        mpz_import(temp1, sizeof(rand_bytes), 1, 1, 1, 0, rand_bytes);
-        // mpz_export to read it back, just to make sure
-        HEXDUMP("generate_ec_priv: rand_bytes",
-                mpz_export(&rand_bytes, NULL, 1, 1, 1, 0, temp1),
-                sizeof(rand_bytes));
+        ecdsa_generate_keypair (ecc_pub, ecc_key, &ssc_state->rctx,
+                                (nettle_random_func *) knuth_lfib_random);
     } else {
         mpz_init_set_str(temp1, priv, 16);
-    }
-    mpz_add_ui(temp1, temp1, 1);
-
-    if (ecc_scalar_set(ecc_key, temp1) == 0) {
+        mpz_add_ui(temp1, temp1, 1);
+        if (ecc_scalar_set(ecc_key, temp1) == 0) {
+            mpz_clear(temp1);
+            return -1;
+        }
         mpz_clear(temp1);
-        return -1;
+        ecc_point_mul_g(ecc_pub, ecc_key);
     }
-
-    mpz_clear(temp1);
-    ecc_point_mul_g(ecc_pub, ecc_key);
 
     return 0;
 }
@@ -4130,13 +4123,11 @@ static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
 {
     DPRINTF("%s: entered function\n", __func__);
     struct ecc_point cmd0_ecpub, ecc_pub;
-    struct knuth_lfib_ctx rctx;
     struct dsa_signature signature;
     uint8_t digest[BYTELEN_384] = { 0 };
     uint8_t kbkdf_index = 0; // hardcoded
     struct sha384_ctx ctx;
 
-    knuth_lfib_init(&rctx, 4711);
     dsa_signature_init(&signature);
 
     if (is_keyslot_valid(ssc_state, kbkdf_index)) { // shouldn't already exist
@@ -4154,7 +4145,7 @@ static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
         goto jump_ret1;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
-    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
+    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
         0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
@@ -4184,7 +4175,7 @@ static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
     HEXDUMP("answer_cmd_0x0_init1 digest", digest, BYTELEN_384);
     // Using non-deterministic signing here like it's probably supposed to be.
     // Don't want to implement/port deterministic signing.
-    ecdsa_sign(&ssc_state->ecc_key_main, &rctx,
+    ecdsa_sign(&ssc_state->ecc_key_main, &ssc_state->rctx,
                (nettle_random_func *)knuth_lfib_random, BYTELEN_384, digest,
                &signature);
     mpz_export(&response[MSG_PREFIX_LENGTH + 0x00 + 0x00], NULL, 1, 1, 1, 0,
@@ -4232,7 +4223,7 @@ static void answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state,
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
         goto jump_ret1;
     }
-    if (generate_ec_priv(NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
+    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
         0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
@@ -4562,7 +4553,7 @@ static void answer_cmd_0x7_init0(struct AppleSSCState *ssc_state,
     const char *priv_str = "cccccccccccccccccccccccccccccccccccccccccccccccc"
                            "cccccccccccccccccccccccccccccccccccccccccccccccc";
     // no NULL here, this should stay static
-    if (generate_ec_priv(priv_str, &ssc_state->ecc_key_main, &ecc_pub) != 0) {
+    if (generate_ec_priv(ssc_state, priv_str, &ssc_state->ecc_key_main, &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
@@ -4719,6 +4710,7 @@ static void apple_ssc_reset(DeviceState *state)
     for (int i = 0; i < KBKDF_KEY_MAX_SLOTS; i++) {
         clear_ecc_scalar(&ssc->ecc_keys[i]);
     }
+    knuth_lfib_init(&ssc->rctx, 4711);
     memset(ssc->random_hmac_key, 0, sizeof(ssc->random_hmac_key));
     memset(ssc->slot_hmac_key, 0, sizeof(ssc->slot_hmac_key));
     memset(ssc->kbkdf_keys, 0, sizeof(ssc->kbkdf_keys));

@@ -311,7 +311,13 @@ static bool dwc3_bd_writeback(DWC3State *s, DWC3BufferDesc *desc, USBPacket *p,
     while (i < desc->count && event.endpoint_event != DEPEVT_XFERCOMPLETE) {
         DWC3TRB *trb = &desc->trbs[i++];
         if (!(trb->ctrl & TRB_CTRL_HWO)) {
-            continue;
+            // continue;
+            // don't skip the TRB when HWO is unset, but error out and cancel the transfer.
+            event.endpoint_event = DEPEVT_XFERNOTREADY;
+            event.status |= DEPEVT_STATUS_TRANSFER_ACTIVE;
+            dwc3_ep_event(s, desc->epid, event);
+            p->status = USB_RET_ASYNC;
+            return false;
         }
         if (length > trb->size) {
             // not sure what to do in this case. this can only have an effect if a huge transfer goes over at least two trb's inside the same descriptor.
