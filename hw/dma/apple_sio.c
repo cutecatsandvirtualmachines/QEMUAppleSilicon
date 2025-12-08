@@ -125,28 +125,30 @@ typedef enum {
 } SIOEndpoint;
 
 typedef enum {
-    PARAM_PROTOCOL = 0,
-    PARAM_DMA_SEGMENT_BASE = 1,
-    PARAM_DMA_SEGMENT_SIZE = 2,
-    PARAM_DMA_RESPONSE_BASE = 11,
-    PARAM_DMA_RESPONSE_SIZE = 12,
-    PARAM_PERF_BUF_BASE = 13,
-    PARAM_PERF_BUF_SIZE = 14,
-    PARAM_PANIC_BASE = 15,
-    PARAM_PANIC_SIZE = 16,
+    PARAM_PROTOCOL_VERSION = 0,
+    PARAM_SEGMENT_BASE,
+    PARAM_SEGMENT_SIZE,
+    PARAM_RESPONSE_BASE = 11,
+    PARAM_RESPONSE_SIZE,
+    PARAM_PERF_BASE,
+    PARAM_PERF_SIZE,
+    PARAM_PANIC_BASE,
+    PARAM_PANIC_SIZE,
     PARAM_PIO_BASE = 26,
-    PARAM_PIO_SIZE = 27,
-    PARAM_DEVICES_BASE = 28,
-    PARAM_DEVICES_SIZE = 29,
-    PARAM_TUNABLE_0_BASE = 30,
-    PARAM_TUNABLE_0_SIZE = 31,
-    PARAM_TUNABLE_1_BASE = 32,
-    PARAM_TUNABLE_1_SIZE = 33,
-    PARAM_PS_REGS_BASE = 36,
-    PARAM_PS_REGS_SIZE = 37,
-    PARAM_FORWARD_IRQS_BASE = 38,
-    PARAM_FORWARD_IRQS_SIZE = 39,
-} SIOParamId;
+    PARAM_PIO_SIZE,
+    PARAM_DEVICES_BASE,
+    PARAM_DEVICES_SIZE,
+    PARAM_ASCWRAP_TUNABLES_BASE,
+    PARAM_ASCWRAP_TUNABLES_SIZE,
+    PARAM_MISC_TUNABLES_BASE,
+    PARAM_MISC_TUNABLES_SIZE,
+    PARAM_SHIMS_BASE,
+    PARAM_SHIMS_SIZE,
+    PARAM_PS_REGS_BASE,
+    PARAM_PS_REGS_SIZE,
+    PARAM_FORWARD_IRQS_BASE,
+    PARAM_FORWARD_IRQS_SIZE,
+} SmartIOParameter;
 
 typedef struct QEMU_PACKED {
     union {
@@ -397,7 +399,7 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
 
     switch (m.op) {
     case OP_CONFIGURE: {
-        config_addr = (s->params[PARAM_DMA_SEGMENT_BASE] << 12) +
+        config_addr = (s->params[PARAM_SEGMENT_BASE] << 12) +
                       m.data * sizeof(SIODMASegment);
         if (dma_memory_read(&s->dma_as, config_addr, &ep->config,
                             sizeof(ep->config),
@@ -408,7 +410,7 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
         break;
     }
     case OP_MAP: {
-        segment_addr = (s->params[PARAM_DMA_SEGMENT_BASE] << 12) +
+        segment_addr = (s->params[PARAM_SEGMENT_BASE] << 12) +
                        m.data * sizeof(SIODMASegment);
         if (dma_memory_read(&s->dma_as, segment_addr + 0x3C, &segment_count,
                             sizeof(segment_count),
@@ -583,9 +585,9 @@ static void apple_sio_reset_hold(Object *obj, ResetType type)
         sioc->parent_reset.hold(obj, type);
     }
 
-    protocol = s->params[PARAM_PROTOCOL];
+    protocol = s->params[PARAM_PROTOCOL_VERSION];
     memset(s->params, 0, sizeof(s->params));
-    s->params[PARAM_PROTOCOL] = protocol;
+    s->params[PARAM_PROTOCOL_VERSION] = protocol;
 
     for (int i = 0; i < SIO_NUM_EPS; ++i) {
         apple_sio_stop(s, &s->eps[i]);
@@ -764,7 +766,7 @@ SysBusDevice *apple_sio_from_node(AppleDTNode *node, AppleA7IOPVersion version,
     rtk = APPLE_RTKIT(dev);
     dev->id = g_strdup("sio");
 
-    s->params[PARAM_PROTOCOL] = protocol;
+    s->params[PARAM_PROTOCOL_VERSION] = protocol;
 
     child = apple_dt_get_node(node, "iop-sio-nub");
     g_assert_nonnull(child);
