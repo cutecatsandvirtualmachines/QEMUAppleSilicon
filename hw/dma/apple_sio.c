@@ -277,10 +277,7 @@ uint64_t apple_sio_dma_read(AppleSIODMAEndpoint *ep, void *buffer, uint64_t len)
 
     while (len > actual_len) {
         req = QTAILQ_FIRST(&ep->requests);
-        if (req == NULL) {
-            break;
-        }
-        if (!apple_sio_map_dma(s, ep, req)) {
+        if (req == NULL || !apple_sio_map_dma(s, ep, req)) {
             break;
         }
         iovec_len =
@@ -311,10 +308,7 @@ uint64_t apple_sio_dma_write(AppleSIODMAEndpoint *ep, void *buffer,
 
     while (len > actual_len) {
         req = QTAILQ_FIRST(&ep->requests);
-        if (req == NULL) {
-            break;
-        }
-        if (!apple_sio_map_dma(s, ep, req)) {
+        if (req == NULL || !apple_sio_map_dma(s, ep, req)) {
             break;
         }
         iovec_len =
