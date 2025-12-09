@@ -103,7 +103,7 @@ hwaddr carveout_alloc_mem(CarveoutAllocator *ca, hwaddr size)
 
     data[0] = ca->end;
     data[1] = size;
-    memset(region_name, 0, sizeof(region_name));
+
     snprintf(region_name, sizeof(region_name), "region-id-%d", ca->cur_id);
     apple_dt_set_prop(ca->node, region_name, sizeof(data), data);
 
