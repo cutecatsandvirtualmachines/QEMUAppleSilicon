@@ -541,11 +541,8 @@ static void apple_mt_spi_push_report_byte(AppleMTSPIBuffer *buf, uint8_t type,
 static void apple_mt_spi_handle_get_feature(AppleMTSPIState *s)
 {
     AppleMTSPILLPacket *packet;
-    AppleMTSPIBuffer buf;
     uint8_t report_id;
     uint8_t frame_number;
-
-    memset(&buf, 0, sizeof(buf));
 
     report_id = apple_mt_spi_ll_read_payload_byte(&s->rx, sizeof(uint8_t));
     frame_number =
@@ -667,13 +664,11 @@ static void apple_mt_spi_handle_control(AppleMTSPIState *s)
 static void apple_mt_spi_handle_fw_packet(AppleMTSPIState *s)
 {
     uint8_t packet_type;
-    AppleMTSPIBuffer buf;
+    AppleMTSPIBuffer buf = { 0 };
     AppleMTSPILLPacket *packet;
 
     if (apple_mt_spi_buf_get_pos(&s->rx) == sizeof(uint32_t)) {
         apple_mt_spi_buf_set_capacity(&s->rx, LL_PACKET_LEN);
-
-        memset(&buf, 0, sizeof(buf));
 
         if (QTAILQ_EMPTY(&s->pending_fw)) {
             apple_mt_spi_push_no_data(&buf);
