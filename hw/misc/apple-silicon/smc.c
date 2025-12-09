@@ -147,7 +147,7 @@ void apple_smc_send_hid_button(AppleSMCState *s, AppleSMCHIDButton button,
                                bool state)
 {
     AppleRTKit *rtk;
-    KeyResponse r;
+    KeyResponse r = { 0 };
 
     if (!s->is_booted) {
         return;
@@ -155,7 +155,6 @@ void apple_smc_send_hid_button(AppleSMCState *s, AppleSMCHIDButton button,
 
     rtk = APPLE_RTKIT(s);
 
-    memset(&r, 0, sizeof(r));
     r.status = SMC_NOTIFICATION;
     r.response[0] = state;
     r.response[1] = button;
@@ -187,7 +186,7 @@ static uint8_t apple_smc_mbse_write(AppleSMCState *s, SMCKey *key,
 {
     AppleRTKit *rtk;
     uint32_t value;
-    KeyResponse r;
+    KeyResponse r = { 0 };
 
     if (payload == NULL || length != key->info.size) {
         return kSMCBadArgumentError;
@@ -210,7 +209,6 @@ static uint8_t apple_smc_mbse_write(AppleSMCState *s, SMCKey *key,
     case 'slpw':
         return kSMCSuccess;
     case 'panb': {
-        memset(&r, 0, sizeof(r));
         r.status = SMC_NOTIFICATION;
         r.response[2] = kSMCSystemStateNotifySMCPanicProgress;
         r.response[3] = kSMCEventSystemStateNotify;
@@ -218,7 +216,6 @@ static uint8_t apple_smc_mbse_write(AppleSMCState *s, SMCKey *key,
         return kSMCSuccess;
     }
     case 'pane': {
-        memset(&r, 0, sizeof(r));
         r.status = SMC_NOTIFICATION;
         r.response[2] = kSMCSystemStateNotifySMCPanicDone;
         r.response[3] = kSMCEventSystemStateNotify;
@@ -236,7 +233,7 @@ static void apple_smc_handle_key_endpoint(void *opaque, const uint32_t ep,
     AppleRTKit *rtk = opaque;
     AppleSMCState *s = opaque;
     KeyMessage *kmsg;
-    KeyResponse resp;
+    KeyResponse resp = { 0 };
     SMCKey *key_entry;
     SMCKeyData *data_entry;
 
@@ -244,7 +241,6 @@ static void apple_smc_handle_key_endpoint(void *opaque, const uint32_t ep,
 
     kmsg->key = le32_to_cpu(kmsg->key);
 
-    memset(&resp, 0, sizeof(resp));
     SMC_LOG_MSG(ep, msg);
 
     switch (kmsg->cmd) {
