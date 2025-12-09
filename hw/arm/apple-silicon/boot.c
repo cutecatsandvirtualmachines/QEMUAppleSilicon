@@ -767,22 +767,22 @@ void apple_boot_setup_monitor_boot_args(
     hwaddr kern_phys_base, hwaddr kern_phys_slide, hwaddr kern_virt_slide,
     hwaddr kern_text_section_off)
 {
-    AppleMonitorBootArgs boot_args = { 0 };
+    AppleMonitorBootArgs args = { 0 };
 
-    boot_args.version = 4;
-    boot_args.virt_base = virt_base;
-    boot_args.phys_base = phys_base;
-    boot_args.mem_size = mem_size;
-    boot_args.kern_args = kern_args;
-    boot_args.kern_entry = kern_entry;
-    boot_args.kern_phys_base = kern_phys_base;
-    boot_args.kern_phys_slide = kern_phys_slide;
-    boot_args.kern_virt_slide = kern_virt_slide;
-    boot_args.kern_text_section_off = kern_text_section_off;
-    qemu_guest_getrandom_nofail(&boot_args.random_bytes, 0x10);
+    args.version = 4;
+    args.virt_base = virt_base;
+    args.phys_base = phys_base;
+    args.mem_size = mem_size;
+    args.kern_args = kern_args;
+    args.kern_entry = kern_entry;
+    args.kern_phys_base = kern_phys_base;
+    args.kern_phys_slide = kern_phys_slide;
+    args.kern_virt_slide = kern_virt_slide;
+    args.kern_text_section_off = kern_text_section_off;
+    qemu_guest_getrandom_nofail(&args.random_bytes, sizeof(args));
 
-    address_space_rw(as, addr, MEMTXATTRS_UNSPECIFIED, &boot_args,
-                     sizeof(boot_args), true);
+    address_space_rw(as, addr, MEMTXATTRS_UNSPECIFIED, &args, sizeof(args),
+                     true);
 }
 
 static void apple_boot_setup_bootargs_rev2(
@@ -791,31 +791,30 @@ static void apple_boot_setup_bootargs_rev2(
     hwaddr dtb_size, AppleVideoArgs *video_args, const char *cmdline,
     hwaddr mem_size_actual)
 {
-    AppleKernelBootArgsRev2 boot_args = { 0 };
+    AppleKernelBootArgsRev2 args = { 0 };
 
-    boot_args.revision = 2;
-    boot_args.version = 2;
-    boot_args.virt_base = virt_base;
-    boot_args.phys_base = phys_base;
-    boot_args.mem_size = mem_size;
-    boot_args.kernel_top = kernel_top;
-    memcpy(&boot_args.video_args, video_args, sizeof(boot_args.video_args));
-    boot_args.device_tree_ptr = dtb_va;
-    boot_args.device_tree_length = dtb_size;
+    args.revision = 2;
+    args.version = 2;
+    args.virt_base = virt_base;
+    args.phys_base = phys_base;
+    args.mem_size = mem_size;
+    args.kernel_top = kernel_top;
+    memcpy(&args.video_args, video_args, sizeof(args.video_args));
+    args.device_tree_ptr = dtb_va;
+    args.device_tree_length = dtb_size;
     if (cmdline == NULL) {
-        memset(boot_args.cmdline, 0, sizeof(boot_args.cmdline));
+        memset(args.cmdline, 0, sizeof(args.cmdline));
     } else {
-        g_strlcpy(boot_args.cmdline, cmdline, sizeof(boot_args.cmdline));
+        g_strlcpy(args.cmdline, cmdline, sizeof(args.cmdline));
     }
-    boot_args.boot_flags = BOOT_FLAGS_DARK_BOOT;
-    boot_args.mem_size_actual = mem_size_actual;
+    args.boot_flags = BOOT_FLAGS_DARK_BOOT;
+    args.mem_size_actual = mem_size_actual;
 
     // iOS 13: mem_size_actual is not a thing
-    address_space_rw(
-        as, addr, MEMTXATTRS_UNSPECIFIED, &boot_args,
-        sizeof(boot_args) -
-            (mem_size_actual == 0 * sizeof(boot_args.mem_size_actual)),
-        true);
+    // however, the boot args region should always
+    // be large enough (one page).
+    address_space_rw(as, addr, MEMTXATTRS_UNSPECIFIED, &args, sizeof(args),
+                     true);
 }
 
 static void apple_boot_setup_bootargs_rev3(
@@ -824,27 +823,27 @@ static void apple_boot_setup_bootargs_rev3(
     hwaddr dtb_size, AppleVideoArgs *video_args, const char *cmdline,
     hwaddr mem_size_actual)
 {
-    AppleKernelBootArgsRev3 boot_args = { 0 };
+    AppleKernelBootArgsRev3 args = { 0 };
 
-    boot_args.revision = 3;
-    boot_args.version = 2;
-    boot_args.virt_base = virt_base;
-    boot_args.phys_base = phys_base;
-    boot_args.mem_size = mem_size;
-    boot_args.kernel_top = kernel_top;
-    memcpy(&boot_args.video_args, video_args, sizeof(boot_args.video_args));
-    boot_args.device_tree_ptr = dtb_va;
-    boot_args.device_tree_length = dtb_size;
+    args.revision = 3;
+    args.version = 2;
+    args.virt_base = virt_base;
+    args.phys_base = phys_base;
+    args.mem_size = mem_size;
+    args.kernel_top = kernel_top;
+    memcpy(&args.video_args, video_args, sizeof(args.video_args));
+    args.device_tree_ptr = dtb_va;
+    args.device_tree_length = dtb_size;
     if (cmdline == NULL) {
-        memset(boot_args.cmdline, 0, sizeof(boot_args.cmdline));
+        memset(args.cmdline, 0, sizeof(args.cmdline));
     } else {
-        g_strlcpy(boot_args.cmdline, cmdline, sizeof(boot_args.cmdline));
+        g_strlcpy(args.cmdline, cmdline, sizeof(args.cmdline));
     }
-    boot_args.boot_flags = BOOT_FLAGS_DARK_BOOT;
-    boot_args.mem_size_actual = mem_size_actual;
+    args.boot_flags = BOOT_FLAGS_DARK_BOOT;
+    args.mem_size_actual = mem_size_actual;
 
-    address_space_rw(as, addr, MEMTXATTRS_UNSPECIFIED, &boot_args,
-                     sizeof(boot_args), true);
+    address_space_rw(as, addr, MEMTXATTRS_UNSPECIFIED, &args, sizeof(args),
+                     true);
 }
 
 void apple_boot_setup_bootargs(uint32_t build_version, AddressSpace *as,
@@ -856,10 +855,6 @@ void apple_boot_setup_bootargs(uint32_t build_version, AddressSpace *as,
 {
     switch (BUILD_VERSION_MAJOR(build_version)) {
     case 13:
-        apple_boot_setup_bootargs_rev2(as, mem, addr, virt_base, phys_base,
-                                       mem_size, kernel_top, dtb_va, dtb_size,
-                                       video_args, cmdline, 0);
-        break;
     case 14:
     case 15:
     case 16:
