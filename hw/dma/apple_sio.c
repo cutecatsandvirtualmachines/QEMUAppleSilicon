@@ -247,11 +247,10 @@ static void apple_sio_dma_writeback(AppleSIOState *s, AppleSIODMAEndpoint *ep,
                                     SIODMAMapRequest *req)
 {
     AppleRTKit *rtk;
-    SIOMessage m;
+    SIOMessage m = { 0 };
 
     rtk = APPLE_RTKIT(s);
 
-    memset(&m, 0, sizeof(m));
     m.op = OP_COMPLETE;
     m.ep = ep->id;
     m.param = (1 << 7);
@@ -396,7 +395,7 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
                           SIOMessage m)
 {
     AppleRTKit *rtk;
-    SIOMessage reply;
+    SIOMessage reply = { 0 };
     dma_addr_t config_addr;
     dma_addr_t segment_addr;
     uint32_t segment_count;
@@ -408,7 +407,6 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
 
     rtk = APPLE_RTKIT(s);
 
-    memset(&reply, 0, sizeof(reply));
     reply.ep = m.ep;
     reply.tag = m.tag;
 
