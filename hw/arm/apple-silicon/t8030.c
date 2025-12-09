@@ -407,12 +407,11 @@ static void t8030_rtkit_seg_prop_setup(AppleDTNode *child, AppleDTNode *iop_nub,
                                        hwaddr base, hwaddr text_size,
                                        hwaddr data_size, bool segr_on_child)
 {
-    AppleIOPSegmentRange segranges[2];
+    AppleIOPSegmentRange segranges[2] = { 0 };
 
     apple_dt_set_prop_str(child, "segment-names", "__TEXT;__DATA");
     apple_dt_set_prop_str(iop_nub, "segment-names", "__TEXT;__DATA");
 
-    memset(segranges, 0, sizeof(segranges));
     segranges[0].phys = base;
     segranges[0].size = text_size;
     segranges[0].flags = BIT(0);
@@ -2430,7 +2429,7 @@ static void t8030_reset(MachineState *machine, ResetType type)
     DeviceState *gpio;
 
     if (!runstate_check(RUN_STATE_RESTORE_VM)) {
-        memset(&t8030->pmgr_reg, 0, sizeof(t8030->pmgr_reg));
+        memset(t8030->pmgr_reg, 0, sizeof(t8030->pmgr_reg));
 
         pmgr_unk_e4800 = 0;
         // maybe also reset pmgr_unk_e4000 array
