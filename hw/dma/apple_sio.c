@@ -477,8 +477,7 @@ static void apple_sio_handle_endpoint(void *opaque, uint32_t ep, uint64_t msg)
         break;
     default:
         if (m.ep >= SIO_NUM_EPS) {
-            qemu_log_mask(LOG_UNIMP, "%s: Unknown SIO ep: %d\n", __func__,
-                          m.ep);
+            qemu_log_mask(LOG_UNIMP, "%s: Unknown ep %X\n", __func__, m.ep);
         } else {
             apple_sio_dma(sio, &sio->eps[m.ep], m);
         }
