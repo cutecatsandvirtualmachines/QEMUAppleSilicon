@@ -1477,7 +1477,7 @@ static void trng_regs_reg_write(void *opaque, hwaddr addr, uint64_t data,
             if (s->ctr_drbg_init) {
                 s->ctr_drbg_init = 0;
                 drbg_ctr_aes256_init(&s->ctr_drbg_rng, seed_material);
-                memset(s->fifo, 0, 0x10);
+                memset(s->fifo, 0, sizeof(s->fifo));
             } else {
                 drbg_ctr_aes256_update(&s->ctr_drbg_rng.key, &s->ctr_drbg_rng.V,
                                        seed_material);
@@ -2232,9 +2232,8 @@ static void aess_raise_interrupt(AppleAESSState *s)
     AppleSEPState *sep = s->sep;
     s->interrupt_status |= SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
     if ((s->interrupt_enabled & SEP_AESS_REGISTER_INTERRUPT_ENABLED_MASK) ==
-            (SEP_AESS_REGISTER_INTERRUPT_ENABLED_INTERRUPT_ENABLED |
-             SEP_AESS_REGISTER_INTERRUPT_ENABLED_RAISE_ON_COMPLETION
-        )) {
+        (SEP_AESS_REGISTER_INTERRUPT_ENABLED_INTERRUPT_ENABLED |
+         SEP_AESS_REGISTER_INTERRUPT_ENABLED_RAISE_ON_COMPLETION)) {
         apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
                                           0x10005); // AESS
     }
@@ -2284,7 +2283,6 @@ static void aess_keywrap_uid(AppleAESSState *s, uint8_t *in, uint8_t *out,
                                 key_len, &error_abort);
     g_assert_nonnull(cipher);
     uint8_t iv[0x10] = { 0 };
-    memset(iv, 0x00, sizeof(iv));
     qcrypto_cipher_setiv(cipher, iv, sizeof(iv), &error_abort);
     uint8_t enc_temp[0x20] = { 0 };
     memcpy(enc_temp, in, sizeof(enc_temp));
@@ -2306,7 +2304,7 @@ static void aess_keywrap_uid(AppleAESSState *s, uint8_t *in, uint8_t *out,
     qcrypto_cipher_free(cipher);
     // interrupts are normally only raised by driver_ops 0x4/0x1D (keywrap) if
     // iterations_counter is over 10/0xA, but don't take that for granted.
-    //aess_raise_interrupt(s); // run it always instead
+    // aess_raise_interrupt(s); // run it always instead
 }
 
 static int aess_get_custom_keywrap_index(uint32_t cmd)
@@ -2331,7 +2329,9 @@ static int aess_get_custom_keywrap_index(uint32_t cmd)
     }
 }
 
-static bool check_register_0x18_KEYDISABLE_BIT_INVALID(uint32_t cmd, uint32_t reg_0x18_keydisable)
+static bool
+check_register_0x18_KEYDISABLE_BIT_INVALID(uint32_t cmd,
+                                           uint32_t reg_0x18_keydisable)
 {
     uint32_t cmd_without_keysize = SEP_AESS_CMD_WITHOUT_KEYSIZE(cmd);
     bool reg_0x18_keydisable_bit0 = (reg_0x18_keydisable & 0x1) != 0;
@@ -2378,11 +2378,9 @@ static void aess_handle_cmd(AppleAESSState *s)
     uint32_t cmd = s->command;
     uint32_t reg_0x18_keydisable = s->reg_0x18_keydisable;
 
-    bool keyselect_non_gid0 =
-        SEP_AESS_CMD_FLAG_KEYSELECT_GID1_CUSTOM(cmd) != 0;
+    bool keyselect_non_gid0 = SEP_AESS_CMD_FLAG_KEYSELECT_GID1_CUSTOM(cmd) != 0;
     bool keyselect_gid1 = (cmd & SEP_AESS_CMD_FLAG_KEYSELECT_GID1) != 0;
-    bool keyselect_custom =
-        (cmd & SEP_AESS_CMD_FLAG_KEYSELECT_CUSTOM) != 0;
+    bool keyselect_custom = (cmd & SEP_AESS_CMD_FLAG_KEYSELECT_CUSTOM) != 0;
     uint32_t normalized_cmd = SEP_AESS_CMD_WITHOUT_FLAGS(cmd);
     QCryptoCipherAlgo cipher_alg = get_aes_cipher_alg(cmd);
     size_t key_len = qcrypto_cipher_get_key_len(cipher_alg);
@@ -2581,8 +2579,7 @@ static void aess_handle_cmd(AppleAESSState *s)
     // sync/set key for command 0x206(0x201), 0x246(0x241), 0x208/0x288(0x281),
     // 0x248/0x2C8(0x2C1)
     else if (normalized_cmd == 0x1) {
-        int custom_keywrap_index =
-            aess_get_custom_keywrap_index(cmd & 0xFF);
+        int custom_keywrap_index = aess_get_custom_keywrap_index(cmd & 0xFF);
         memcpy(s->custom_key_index[custom_keywrap_index], s->in_full,
                sizeof(s->custom_key_index[custom_keywrap_index]));
         // unset (real zero-key) != zero-key set (not real zero-key)
@@ -2602,19 +2599,20 @@ static void aess_handle_cmd(AppleAESSState *s)
     }
 #endif
     else {
-        DPRINTF("SEP AESS_BASE: %s: Unknown command 0x%02x\n", __func__,
-                cmd);
+        DPRINTF("SEP AESS_BASE: %s: Unknown command 0x%02x\n", __func__, cmd);
         // valid_command = false;
     }
 
 jump_return:
     // comment this out when not using async
     // if using QEMU_LOCK_GUARD (non-WITH_) in write
-    WITH_QEMU_LOCK_GUARD(&s->lock) {
+    WITH_QEMU_LOCK_GUARD(&s->lock)
+    {
         invalid_parameters |= !valid_command;
         if (invalid_parameters) {
             // always keep this flag
-            s->interrupt_status |= SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT;
+            s->interrupt_status |=
+                SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT;
             qemu_log_mask(LOG_GUEST_ERROR, "%s: unrecoverable_error just got raised, SEP will panic soon.: cmd 0x%03x\n", __func__, cmd);
         }
         s->status &= ~SEP_AESS_REGISTER_STATUS_ACTIVE;
@@ -2624,7 +2622,8 @@ jump_return:
     }
 }
 
-static void aess_handle_cmd_bh(void *opaque) {
+static void aess_handle_cmd_bh(void *opaque)
+{
     AppleAESSState *s = opaque;
     aess_handle_cmd(s);
 }
@@ -2636,7 +2635,7 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     AppleSEPState *sep = s->sep;
     uint64_t orig_data = data;
 
-    //QEMU_LOCK_GUARD(&s->lock);
+    // QEMU_LOCK_GUARD(&s->lock);
 
 #ifdef ENABLE_CPU_DUMP_STATE
     DPRINTF("\n");
@@ -2647,7 +2646,8 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         if ((data & SEP_AESS_REGISTER_STATUS_RUN_COMMAND) != 0) {
             data &= ~SEP_AESS_REGISTER_STATUS_RUN_COMMAND;
             data |= SEP_AESS_REGISTER_STATUS_ACTIVE;
-            WITH_QEMU_LOCK_GUARD(&s->lock) {
+            WITH_QEMU_LOCK_GUARD(&s->lock)
+            {
                 s->status = data; // surely no bitwise OR?
                 s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
             }
@@ -2660,7 +2660,8 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         s->command = data;
         goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_STATUS: // Interrupt Status
-        WITH_QEMU_LOCK_GUARD(&s->lock) {
+        WITH_QEMU_LOCK_GUARD(&s->lock)
+        {
             if ((data & SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE) != 0) {
                 s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
             }
@@ -2723,7 +2724,7 @@ static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     AppleSEPState *sep = s->sep;
     uint64_t ret = 0;
 
-    //QEMU_LOCK_GUARD(&s->lock);
+    // QEMU_LOCK_GUARD(&s->lock);
 
 #ifdef ENABLE_CPU_DUMP_STATE
     DPRINTF("\n");
@@ -2731,7 +2732,8 @@ static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
 #endif
     switch (addr) {
     case SEP_AESS_REGISTER_STATUS: // Status
-        WITH_QEMU_LOCK_GUARD(&s->lock) {
+        WITH_QEMU_LOCK_GUARD(&s->lock)
+        {
             ret = s->status;
         }
         goto jump_log;
@@ -2739,7 +2741,8 @@ static uint64_t aess_base_reg_read(void *opaque, hwaddr addr, unsigned size)
         ret = s->command;
         goto jump_log;
     case SEP_AESS_REGISTER_INTERRUPT_STATUS: // Interrupt Status
-        WITH_QEMU_LOCK_GUARD(&s->lock) {
+        WITH_QEMU_LOCK_GUARD(&s->lock)
+        {
             ret = s->interrupt_status;
         }
         goto jump_log;
@@ -2912,32 +2915,30 @@ static const MemoryRegionOps aesc_base_reg_ops = {
     .valid.unaligned = false,
 };
 
-static void pka_handle_cmd(ApplePKAState *s) {
+static void pka_handle_cmd(ApplePKAState *s)
+{
     AppleSEPState *sep = s->sep;
 
     // values: 0x4/0x8/0x10/0x20/0x40/0x80/0x100
     if (s->command == 0x40) { // migrate data with PKA
-        apple_a7iop_interrupt_status_push(
-            APPLE_A7IOP(sep)->iop_mailbox,
-            0x1000A); // ack first interrupt/0xA
+        apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
+                                          0x1000A); // ack first interrupt/0xA
         // apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
         // 0x1000B); // ack second interrupt/0xB
-        apple_a7iop_interrupt_status_push(
-            APPLE_A7IOP(sep)->iop_mailbox,
-            0x1000C); // ack third interrupt/0xC
+        apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
+                                          0x1000C); // ack third interrupt/0xC
     } else if (s->command == 0x80) { // MPKA_ECPUB_ATTEST
-        apple_a7iop_interrupt_status_push(
-            APPLE_A7IOP(sep)->iop_mailbox,
-            0x1000A); // ack first interrupt/0xA
+        apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
+                                          0x1000A); // ack first interrupt/0xA
         // apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
         // 0x1000B); // ack second interrupt/0xB
-        apple_a7iop_interrupt_status_push(
-            APPLE_A7IOP(sep)->iop_mailbox,
-            0x1000C); // ack third interrupt/0xC
+        apple_a7iop_interrupt_status_push(APPLE_A7IOP(sep)->iop_mailbox,
+                                          0x1000C); // ack third interrupt/0xC
     }
 }
 
-static void pka_handle_cmd_bh(void *opaque) {
+static void pka_handle_cmd_bh(void *opaque)
+{
     ApplePKAState *s = opaque;
     pka_handle_cmd(s);
 }
@@ -2958,7 +2959,7 @@ static void pka_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
         s->command = data;
         // PKA commands get executed directly, without additional trigger
         pka_handle_cmd(s);
-        //qemu_bh_schedule(s->command_bh);
+        // qemu_bh_schedule(s->command_bh);
         goto jump_log;
     case 0x4: // maybe status_out0
 #if 1
@@ -3816,8 +3817,12 @@ AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
     qemu_mutex_init(&s->pka_state.lock);
 
     // No async necessary for TRNG?
-    s->aess_state.command_bh = aio_bh_new_guarded(qemu_get_aio_context(), aess_handle_cmd_bh, &s->aess_state, &DEVICE(s)->mem_reentrancy_guard);
-    s->pka_state.command_bh = aio_bh_new_guarded(qemu_get_aio_context(), pka_handle_cmd_bh, &s->pka_state, &DEVICE(s)->mem_reentrancy_guard); // unused yet
+    s->aess_state.command_bh =
+        aio_bh_new_guarded(qemu_get_aio_context(), aess_handle_cmd_bh,
+                           &s->aess_state, &DEVICE(s)->mem_reentrancy_guard);
+    s->pka_state.command_bh = aio_bh_new_guarded(
+        qemu_get_aio_context(), pka_handle_cmd_bh, &s->pka_state,
+        &DEVICE(s)->mem_reentrancy_guard); // unused yet
 
     return s;
 }
@@ -3843,12 +3848,20 @@ static void apple_sep_realize(DeviceState *dev, Error **errp)
         sc->parent_realize(dev, errp);
     }
     qdev_realize(DEVICE(s->cpu), NULL, errp);
-    qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_CPU_IRQ, 0, qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
+    qdev_connect_gpio_out_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox),
+                                APPLE_A7IOP_SEP_CPU_IRQ, 0,
+                                qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
     // mailbox irq's aren't being handled that way (anymore)
     // timer0 == phys
-    qdev_connect_gpio_out(DEVICE(s->cpu), GTIMER_PHYS, qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_GPIO_TIMER0, 0));
+    qdev_connect_gpio_out(
+        DEVICE(s->cpu), GTIMER_PHYS,
+        qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox),
+                               APPLE_A7IOP_SEP_GPIO_TIMER0, 0));
     // timer1 == virt (sepos >= 16)
-    qdev_connect_gpio_out(DEVICE(s->cpu), GTIMER_VIRT, qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox), APPLE_A7IOP_SEP_GPIO_TIMER1, 0));
+    qdev_connect_gpio_out(
+        DEVICE(s->cpu), GTIMER_VIRT,
+        qdev_get_gpio_in_named(DEVICE(APPLE_A7IOP(s)->iop_mailbox),
+                               APPLE_A7IOP_SEP_GPIO_TIMER1, 0));
 }
 
 static void aess_reset(AppleAESSState *s)
@@ -4177,8 +4190,8 @@ static int generate_ec_priv(struct AppleSSCState *ssc_state, const char *priv,
     ecc_scalar_init(ecc_key, ecc);
 
     if (priv == NULL) {
-        ecdsa_generate_keypair (ecc_pub, ecc_key, &ssc_state->rctx,
-                                (nettle_random_func *) knuth_lfib_random);
+        ecdsa_generate_keypair(ecc_pub, ecc_key, &ssc_state->rctx,
+                               (nettle_random_func *)knuth_lfib_random);
     } else {
         mpz_init_set_str(temp1, priv, 16);
         mpz_add_ui(temp1, temp1, 1);
@@ -4325,7 +4338,7 @@ static void clear_ecc_scalar(struct ecc_scalar *ecc_key)
 {
     if (!buffer_is_zero(ecc_key, sizeof(struct ecc_scalar))) {
         ecc_scalar_clear(ecc_key);
-        memset(ecc_key, 0, sizeof(struct ecc_scalar));
+        memset(ecc_key, 0, sizeof(*ecc_key));
     }
 }
 
@@ -4359,8 +4372,8 @@ static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
         goto jump_ret1;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
-    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
-        0) {
+    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index],
+                         &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
@@ -4437,8 +4450,8 @@ static void answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state,
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
         goto jump_ret1;
     }
-    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index], &ecc_pub) !=
-        0) {
+    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index],
+                         &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
@@ -4767,7 +4780,8 @@ static void answer_cmd_0x7_init0(struct AppleSSCState *ssc_state,
     const char *priv_str = "cccccccccccccccccccccccccccccccccccccccccccccccc"
                            "cccccccccccccccccccccccccccccccccccccccccccccccc";
     // no NULL here, this should stay static
-    if (generate_ec_priv(ssc_state, priv_str, &ssc_state->ecc_key_main, &ecc_pub) != 0) {
+    if (generate_ec_priv(ssc_state, priv_str, &ssc_state->ecc_key_main,
+                         &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
