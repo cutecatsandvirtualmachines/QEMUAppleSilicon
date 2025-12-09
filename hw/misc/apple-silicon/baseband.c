@@ -569,7 +569,6 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
     uint32_t vals[0x3c / 4] = { 0 };
     custom_baseband0_t custom_baseband0 = { 0 };
     // g_assert_cmpuint(sizeof(custom_baseband0), ==, 60);
-    memset(&custom_baseband0, 0x0, sizeof(custom_baseband0));
 
     switch (addr) {
     case 0x0: // boot stage
@@ -589,8 +588,6 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
         custom_baseband0.unkn1 = 0x0;
         // memcpy(custom_baseband0.pad0, "FOBART",
         //        sizeof(custom_baseband0.pad0)); // non-null-terminated
-        memset(custom_baseband0.pad0, 0,
-               sizeof(custom_baseband0.pad0)); // non-null-terminated
         memcpy(custom_baseband0.serial_number, "SNUMSNUMSNUM",
                sizeof(custom_baseband0.serial_number)); // non-null-terminated
         // iPhone 11 value from wiki. random iPhone 7 log value is also found in
@@ -600,8 +597,6 @@ static uint64_t apple_baseband_device_bar1_read(void *opaque, hwaddr addr,
                sizeof(custom_baseband0.public_key_hash)); // non-null-terminated
         // memcpy(custom_baseband0.pad1, "67890A",
         //        sizeof(custom_baseband0.pad1)); // non-null-terminated
-        memset(custom_baseband0.pad1, 0,
-               sizeof(custom_baseband0.pad1)); // non-null-terminated
         uint8_t *custom_baseband0_ptr = (uint8_t *)&custom_baseband0;
         val = ldl_le_p(custom_baseband0_ptr + addr - 0x4);
         break;
@@ -824,7 +819,7 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
 {
     AppleRTKit *rtk;
     uint32_t value;
-    KeyResponse r;
+    KeyResponse r = { 0 };
 
     AppleBasebandState *baseband = APPLE_BASEBAND(object_property_get_link(
         OBJECT(qdev_get_machine()), "baseband", &error_fatal));
@@ -861,7 +856,6 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
         // baseband_gpio_set_reset_det(DEVICE(baseband_device), false);
 #if 0
         enableVector:
-        memset(&r, 0, sizeof(r));
         r.status = SMC_NOTIFICATION;
         //r.response[0] = 0x01; // maybe enable afterwards (directly after disabling)
         r.response[0] = (value & 1); // maybe enable afterwards (directly after disabling)
@@ -920,7 +914,6 @@ static uint8_t smc_key_gP09_write(AppleSMCState *s, SMCKey *key,
 #endif
 #if 0
         // this might lead to "reset detected" ; ... or not
-        memset(&r, 0, sizeof(r));
         r.status = SMC_NOTIFICATION;
         r.response[0] = use_pmuExtOnConfigOverride_pulldown;
         //r.response[0] = !use_pmuExtOnConfigOverride_pulldown;
