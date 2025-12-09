@@ -7,6 +7,7 @@
 #include "migration/vmstate.h"
 #include "qapi/error.h"
 #include "qemu/bitops.h"
+#include "qemu/cutils.h"
 #include "qemu/lockable.h"
 #include "qemu/log.h"
 #include "qemu/main-loop.h"
@@ -236,8 +237,12 @@ static bool aes_process_command(AppleAESState *s, AESCommand *cmd)
         break;
     }
     case OPCODE_DSB: {
+        // the first 16 byte input to dsb must be xor'ed with the key of the software encryption for reasons
         // memcpy(, &cmd->data[1], 16);
         // memcpy(, &cmd->data[5], 16);
+        // qemu_hexdump(stderr, "AP AES: OPCODE_DSB: data0", &cmd->data[0], 4);
+        // qemu_hexdump(stderr, "AP AES: OPCODE_DSB: arr0", &cmd->data[1], 16);
+        // qemu_hexdump(stderr, "AP AES: OPCODE_DSB: arr1", &cmd->data[5], 16);
         break;
     }
     case OPCODE_DATA: {

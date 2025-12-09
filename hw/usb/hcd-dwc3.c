@@ -355,13 +355,16 @@ static bool dwc3_bd_writeback(DWC3State *s, DWC3BufferDesc *desc, USBPacket *p,
             if (desc->actual_length != 0x8) {
                 // maybe return true in this case, or let process_packet handle this as well.
                 // assert, because it can't be tested right now
-                g_assert_not_reached();
+                // this assert got hit, unsure which status to return, because of further dwc3_process_packet xfer==NULL handling when setting ASYNC.
+                // g_assert_not_reached();
+                qemu_log_mask(LOG_GUEST_ERROR, "%s: TRBCTL_CONTROL_SETUP: desc->actual_length != 0x8 edge case got hit: p->pid: 0x%x desc->epid: 0x%x desc->actual_length 0x%x length 0x%x trb->size 0x%x last_control_command %s\n", __func__, p->pid, desc->epid, desc->actual_length, length, trb->size, TRBControlType_names[s->last_control_command]);
                 event.endpoint_event = DEPEVT_XFERNOTREADY;
                 event.status |= DEPEVT_STATUS_CONTROL_DATA;
                 event.status |= DEPEVT_STATUS_TRANSFER_ACTIVE;
                 // must not use the dwc3_ep_trb_event variant here ???
                 dwc3_ep_event(s, desc->epid, event);
-                p->status = USB_RET_ASYNC;
+                // p->status = USB_RET_ASYNC;
+                p->status = USB_RET_SUCCESS;
                 return false;
             }
             memcpy(&s->setup_packet, buffer, sizeof(s->setup_packet));

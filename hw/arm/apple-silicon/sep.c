@@ -134,12 +134,19 @@ typedef struct {
     (cmd &                                           \
      (SEP_AESS_CMD_FLAG_KEYSELECT_GID1 | SEP_AESS_CMD_FLAG_KEYSELECT_CUSTOM))
 
+// static keys: 0x00/0x40/0x80/0xc0
+// seeded keys:
+// wrapping key: key index 0: 0x01..0x05 ; key index 1: 0x41..0x45
+// authentication key: key index 0: 0x81..0x04 ; key index 1: 0xc1..0x44
+
 #define SEP_AESS_COMMAND_SYNC_SEEDBITS 0x0 // sync with register_seed_bits?
-#define SEP_AESS_COMMAND_ENCRYPT_CBC_ONLY_NONCUSTOM_FORCE_CUSTOM_AES256 \
-    0x6 // forces and overwrites flags, aes256 && custom. do nothing if the
-        // custom flag was set.
-#define SEP_AESS_COMMAND_ENCRYPT_CBC_FORCE_CUSTOM_AES256 \
-    0x8 // forces and overwrites flags, aes256 && custom.
+// usually in combination with SYNC_SEEDBITS
+#define SEP_AESS_COMMAND_CREATE_KEY_FROM_SEED 0x3
+// forces and overwrites flags, aes256 && custom. do nothing if the custom flag
+// was set.
+#define SEP_AESS_COMMAND_ENCRYPT_CBC_ONLY_NONCUSTOM_FORCE_CUSTOM_AES256 0x6
+// forces and overwrites flags, aes256 && custom.
+#define SEP_AESS_COMMAND_ENCRYPT_CBC_FORCE_CUSTOM_AES256 0x8
 #define SEP_AESS_COMMAND_ENCRYPT_CBC 0x9
 #define SEP_AESS_COMMAND_DECRYPT_CBC 0xA
 #define SEP_AESS_COMMAND_0xB 0xB // custom aes key?
@@ -171,13 +178,13 @@ typedef struct {
 #define SEP_AESS_REGISTER_INTERRUPT_ENABLED_RAISE_ON_COMPLETION BIT(0)
 #define SEP_AESS_REGISTER_INTERRUPT_ENABLED_INTERRUPT_ENABLED BIT(1)
 
-#define SEP_AESS_SEED_BITS_BIT0 (1 << 0)
-#define SEP_AESS_SEED_BITS_BIT27 (1 << 27) // cmds 0x50 and 0x90
-#define SEP_AESS_SEED_BITS_BIT28 (1 << 28) // invalid EKEY?
-#define SEP_AESS_SEED_BITS_SEP_DSEC_DEMOTED \
-    (1 << 29) // DSEC tag present, demote SEP
-#define SEP_AESS_SEED_BITS_AP_PROD_DEMOTED \
-    (1 << 30) // ap is prod-fused and demoted
+#define SEP_AESS_SEED_BITS_BIT0 BIT(0)
+#define SEP_AESS_SEED_BITS_BIT27 BIT(27) // cmds 0x50 and 0x90
+#define SEP_AESS_SEED_BITS_BIT28 BIT(28) // invalid EKEY?
+// DSEC tag present, demote SEP
+#define SEP_AESS_SEED_BITS_SEP_DSEC_DEMOTED BIT(29)
+// ap is prod-fused and demoted
+#define SEP_AESS_SEED_BITS_AP_PROD_DEMOTED BIT(30)
 #define SEP_AESS_SEED_BITS_IMG4_VERIFIED (1 << 31) // img4 verified?
 
 
@@ -208,9 +215,62 @@ static uint32_t AESS_UID_SEED_INVALID[0x20 / 4] = { 0x1FF11FF1, 0x1FF11FF1,
                                                     0xC4F3C4AA, 0xD34DB33F,
                                                     0x1FF11FF1, 0x1FF11FF1 };
 
+/* comment to prevent kate from adding whitespaces upon pressing enter */
+
 #define SEP_PKA_STATUS_INTERRUPT_0xA 0x1
 #define SEP_PKA_STATUS_INTERRUPT_0xB 0x2
 #define SEP_PKA_STATUS_INTERRUPT_0xC 0x4
+
+// for KEY_BASE register 0x0: key status
+#define SEP_KEY_BASE_KEY_STATUS_OFFSET 0x0
+#define SEP_KEY_BASE_KEY_STATUS_HDCP_FUSE_VALID BIT(0)
+#define SEP_KEY_BASE_KEY_STATUS_LC128_VALID BIT(1)
+#define SEP_KEY_BASE_KEY_STATUS_DPK_TX_VALID BIT(2)
+
+#define SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_SHIFT 16
+#define SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_MASK 0x7f
+#define SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_GET(n) ((n >> SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_SHIFT) & SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_MASK)
+#define SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_SET(n) ((n & SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_MASK) << SEP_KEY_BASE_KEY_STATUS_KM_VALID_INTERFACE_SHIFT)
+
+#define SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_SHIFT 24
+#define SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_MASK 0x7f
+#define SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_GET(n) ((n >> SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_SHIFT) & SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_MASK)
+#define SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_SET(n) ((n & SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_MASK) << SEP_KEY_BASE_KEY_STATUS_KS_VALID_INTERFACE_SHIFT)
+
+// for KEY_BASE register 0x4: load key
+// interface value is a bitmask
+#define SEP_KEY_BASE_LOAD_KEY_OFFSET 0x4
+#define SEP_KEY_BASE_LOAD_KEY_INTERFACE_SHIFT 8
+#define SEP_KEY_BASE_LOAD_KEY_INTERFACE_MASK 0xff
+#define SEP_KEY_BASE_LOAD_KEY_INTERFACE_GET(n) ((n >> SEP_KEY_BASE_LOAD_KEY_INTERFACE_SHIFT) & SEP_KEY_BASE_LOAD_KEY_INTERFACE_MASK)
+#define SEP_KEY_BASE_LOAD_KEY_INTERFACE_SET(n) ((n & SEP_KEY_BASE_LOAD_KEY_INTERFACE_MASK) << SEP_KEY_BASE_LOAD_KEY_INTERFACE_SHIFT)
+
+// unkn0 0x0==Lc128/DpkTx, 0x1/0x3==Km/Ks, 0x2==Km
+#define SEP_KEY_BASE_LOAD_KEY_UNKN0_SHIFT 4
+#define SEP_KEY_BASE_LOAD_KEY_UNKN0_MASK 0x3
+#define SEP_KEY_BASE_LOAD_KEY_UNKN0_GET(n) ((n >> SEP_KEY_BASE_LOAD_KEY_UNKN0_SHIFT) & SEP_KEY_BASE_LOAD_KEY_UNKN0_MASK)
+#define SEP_KEY_BASE_LOAD_KEY_UNKN0_SET(n) ((n & SEP_KEY_BASE_LOAD_KEY_UNKN0_MASK) << SEP_KEY_BASE_LOAD_KEY_UNKN0_SHIFT)
+
+#define SEP_KEY_BASE_LOAD_KEY_ACTIVE BIT(0)
+
+// for KEY_BASE registers 0xc (PKA) && 0x10 (AESH) && 0x14 (AES2): send key
+// die offset/bitshift is unknown
+// interface value is a bitmask
+// interface is for Km for PKA && AESH, but Ks for AES2
+#define SEP_KEY_BASE_SEND_KEY_PKA_OFFSET 0xc
+#define SEP_KEY_BASE_SEND_KEY_AESH_OFFSET 0x10
+#define SEP_KEY_BASE_SEND_KEY_AES2_OFFSET 0x14
+#define SEP_KEY_BASE_SEND_KEY_INTERFACE_SHIFT 8
+#define SEP_KEY_BASE_SEND_KEY_INTERFACE_MASK 0x7
+#define SEP_KEY_BASE_SEND_KEY_INTERFACE_GET(n) ((n >> SEP_KEY_BASE_SEND_KEY_INTERFACE_SHIFT) & SEP_KEY_BASE_SEND_KEY_INTERFACE_MASK)
+#define SEP_KEY_BASE_SEND_KEY_INTERFACE_SET(n) ((n & SEP_KEY_BASE_SEND_KEY_INTERFACE_MASK) << SEP_KEY_BASE_SEND_KEY_INTERFACE_SHIFT)
+#define SEP_KEY_BASE_SEND_KEY_ACTIVE BIT(0)
+
+// handler key selectors: Lc128==0x0; DpkTx==0x1; Km==0x2; Ks==0x3
+
+#define SEP_PMGR_REGISTER_POWER_CONTROL 0x4000
+#define SEP_PMGR_REGISTER_POWER_CONTROL_POWER_GATE_DELAY_SHIFT 16
+#define SEP_PMGR_REGISTER_ACG_CONTROL 0x4004 // some tunables shit
 
 
 static inline void block16_set(union nettle_block16 *r,
@@ -721,13 +781,139 @@ sepos_return_module_thread_string_t8030(uint64_t module_thread_id)
     }
 }
 
+static const char *
+sepos_return_module_thread_string_t8030_15(uint64_t module_thread_id)
+{
+    // base == sepdump02_SEPOS?
+    // T8030 sepfw 15 thread name/info base 0xFFFFFFE0000235C8
+
+    switch (module_thread_id) {
+    case 0x0:
+        return "BOOT"; // SEPOS
+    case 0x10000:
+        return "SEPD";
+    case 0x10001:
+        return "intr";
+    case 0x10002:
+        return "Cons";
+    case 0x10003:
+        return "XPRT";
+    case 0x10004:
+        return "PMGR";
+    case 0x10005:
+        return "AKF ";
+    case 0x10006:
+        return "EP0D";
+    case 0x10007:
+        return "EPCD";
+    case 0x10008:
+        return "TRNG";
+    case 0x10009:
+        return "KEY ";
+    case 0x1000A:
+        return "MONI";
+    case 0x1000B:
+        return "AESH";
+    case 0x1000C:
+        return "EISP";
+    case 0x1000D:
+        return "cnin";
+    case 0x1000E:
+        return "shnd";
+    case 0x1000F:
+        return "ep0 ";
+    case 0x10010:
+        return "ep1 ";
+    case 0x20000:
+        return "DAES";
+    case 0x20001:
+        return "AESS";
+    case 0x20002:
+        return "AEST";
+    case 0x20003:
+        return "PKA ";
+    case 0x30000:
+        return "dxio";
+    case 0x30001:
+        return "GPIO";
+    case 0x30002:
+        return "I2C ";
+    case 0x40000:
+        return "enti";
+    case 0x50000:
+        return "sskg";
+    case 0x50001:
+        return "skgs";
+    case 0x50002:
+        return "crow";
+    case 0x50003:
+        return "cro2";
+    case 0x60000:
+        return "sars";
+    case 0x70000:
+        return "ARTM";
+    case 0x80000:
+        return "xART";
+    case 0x90000:
+        return "eiAp";
+    case 0x90001:
+        return "EISP";
+    case 0x90002:
+        return "HWRS";
+    case 0x90003:
+        return "FDCN";
+    case 0x90004:
+        return "SDCN";
+    case 0x90005:
+        return "FIPP";
+    case 0x90006:
+        return "FPCE";
+    case 0x90007:
+        return "FPPD";
+    case 0x90008:
+        return "FDMA";
+    case 0x90009:
+        return "SHAV";
+    case 0x9000A:
+        return "PROX";
+    case 0xA0000:
+        return "scrd";
+    case 0xB0000:
+        return "pass";
+    case 0xC0000:
+        return "sks ";
+    case 0xC0001:
+        return "sksa";
+    case 0xD0000:
+        return "hdcp";
+    case 0xE0000:
+        return "pair";
+    case 0xF0000:
+        return "sprl";
+    case 0x100000:
+        return "sse";
+    case 0x110000:
+        return "sidv";
+    case 0x120000:
+        return "unit";
+    case 0x1D1E1D1E:
+        return "IDLE";
+    default:
+        return "Unknown";
+    }
+}
+
 static const char *sepos_return_module_thread_string(uint32_t chip_id,
                                                      uint64_t module_thread_id)
 {
     if (chip_id == 0x8015) {
         return sepos_return_module_thread_string_t8015(module_thread_id);
     } else if (chip_id == 0x8030) {
+#if SEP_USE_VERSION_OVERRIDE == 15
+        return sepos_return_module_thread_string_t8030_15(module_thread_id);
+#else
         return sepos_return_module_thread_string_t8030(module_thread_id);
+#endif
     }
     g_assert_not_reached();
 }
@@ -1573,6 +1759,12 @@ static void key_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
 #endif
     switch (addr) {
+    case SEP_KEY_BASE_LOAD_KEY_OFFSET: // load_key
+        DPRINTF("SEP KEY_BASE: Offset 0x" HWADDR_FMT_plx
+                ": Input: load_key 0x%" PRIX64 "\n",
+                addr, data);
+        data &= ~SEP_KEY_BASE_LOAD_KEY_ACTIVE;
+        goto jump_default;
     case 0x8: // command or storage index: 0x20-0x26, 0x30-0x31, 0x04 (without
               // input)
         /*
@@ -1618,7 +1810,15 @@ static uint64_t key_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
 #endif
     switch (addr) {
+    case SEP_KEY_BASE_LOAD_KEY_OFFSET:
+        DPRINTF("SEP KEY_BASE: LOAD_KEY read-back. read at 0x" HWADDR_FMT_plx "\n", addr);
+        goto jump_default;
+    case 0x40 ... 0x248:
+        // actual size 0x20a
+        DPRINTF("SEP KEY_BASE: data0 read. read at 0x" HWADDR_FMT_plx "\n", addr);
+        goto jump_default;
     default:
+    jump_default:
         memcpy(&ret, &s->key_base_regs[addr], size);
         DPRINTF("SEP KEY_BASE: Unknown read at 0x" HWADDR_FMT_plx "\n", addr);
         break;
@@ -1710,11 +1910,15 @@ static void key_fcfg_reg_write(void *opaque, hwaddr addr, uint64_t data,
                 addr, data);
 
         goto jump_default;
-    case 0x4: {
+    case 0x4:
         DPRINTF("SEP KEY_FCFG: TEST1 0x" HWADDR_FMT_plx " with value 0x%" PRIX64
                 "\n",
                 addr, data);
-    }
+        goto jump_default;
+    case 0xc:
+        DPRINTF("SEP KEY_FCFG: TEST2 0x" HWADDR_FMT_plx " with value 0x%" PRIX64
+                "\n",
+                addr, data);
         goto jump_default;
     case 0x10:
         if (data == 0x1) {
@@ -2369,6 +2573,10 @@ static void aess_handle_cmd(AppleAESSState *s)
         }
     }
 #endif
+#if 0
+    // cmd 0xc0 AESSEP_OPERATION_CREATE_D
+    // cmd 0x43 AESSEP_OPERATION_CREATE_FROM_GEN2D
+#endif
 #if 1
     // sync/set key for command 0x206(0x201), 0x246(0x241), 0x208/0x288(0x281),
     // 0x248/0x2C8(0x2C1)
@@ -2407,6 +2615,7 @@ jump_return:
         if (invalid_parameters) {
             // always keep this flag
             s->interrupt_status |= SEP_AESS_REGISTER_INTERRUPT_STATUS_UNRECOVERABLE_ERROR_INTERRUPT;
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: unrecoverable_error just got raised, SEP will panic soon.: cmd 0x%03x\n", __func__, cmd);
         }
         s->status &= ~SEP_AESS_REGISTER_STATUS_ACTIVE;
         // call raise_interrupt always instead of only on keywrap, because it's
@@ -2443,7 +2652,7 @@ static void aess_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                 s->interrupt_status &= ~SEP_AESS_REGISTER_INTERRUPT_STATUS_DONE;
             }
             aess_handle_cmd(s);
-            //qemu_bh_schedule(s->command_bh);
+            // qemu_bh_schedule(s->command_bh);
         }
         goto jump_log;
     case SEP_AESS_REGISTER_COMMAND: // Command
@@ -2603,8 +2812,13 @@ static void aesh_base_reg_write(void *opaque, hwaddr addr, uint64_t data,
     cpu_dump_state(CPU(s->cpu), stderr, CPU_DUMP_CODE);
 #endif
     switch (addr) {
+    case 0x8: // cmd
+        // should be the same as AESS, just with different commands.
+        // 0x2/0x18/0x1/0x8/0x10/0xc/0x1c/0x0/0x4/0x9
+        goto jump_default;
     // case 0xB4: 0x40 bytes from TRNG
     default:
+    jump_default:
         memcpy(&s->aesh_base_regs[addr], &data, size);
         DPRINTF("SEP AESH_BASE: Unknown write at 0x" HWADDR_FMT_plx
                 " with value 0x%" PRIX64 "\n",
@@ -2814,7 +3028,7 @@ static uint64_t pka_base_reg_read(void *opaque, hwaddr addr, unsigned size)
     switch (addr) {
     case 0x8: // maybe status_in0/interrupt_status
 #if 1
-              // if (s->status0 == 0x1)
+        // if (s->status0 == 0x1)
         if (s->status_in0 == 0x1) {
             ret = 0x1; // this means mod_PKA_read output ready
         }
