@@ -97,9 +97,10 @@ struct AppleSIOState {
     MemoryRegion ascv2_iomem;
     MemoryRegion *dma_mr;
     AddressSpace dma_as;
-
     AppleSIODMAEndpoint eps[SIO_NUM_EPS];
-    uint32_t params[0x100];
+    uint32_t protocol_version;
+    uint64_t segment_base;
+    uint32_t segment_size;
 };
 
 typedef enum {
@@ -341,6 +342,31 @@ uint64_t apple_sio_dma_remaining(AppleSIODMAEndpoint *ep)
     return len;
 }
 
+static void apple_sio_control_get_param(AppleSIOState *s, SIOMessage *reply,
+                                        uint32_t param)
+{
+    if (param == PARAM_PROTOCOL_VERSION) {
+        reply->data = s->protocol_version;
+        reply->op = OP_GET_PARAM_RESP;
+    } else {
+        reply->op = OP_SYNC_ERROR;
+    }
+}
+
+static void apple_sio_control_set_param(AppleSIOState *s, SIOMessage *reply,
+                                        uint32_t param, uint32_t value)
+{
+    switch (param) {
+    case PARAM_SEGMENT_BASE:
+        s->segment_base = value << 12;
+        break;
+    case PARAM_SEGMENT_SIZE:
+        s->segment_size = value;
+        break;
+    }
+    reply->op = OP_ACK;
+}
+
 static void apple_sio_control(AppleSIOState *s, AppleSIODMAEndpoint *ep,
                               SIOMessage *m)
 {
@@ -353,18 +379,13 @@ static void apple_sio_control(AppleSIOState *s, AppleSIODMAEndpoint *ep,
 
     reply.ep = m->ep;
     reply.tag = m->tag;
+
     switch (m->op) {
-    case OP_GET_PARAM: {
-        reply.data = s->params[m->param];
-        reply.op = OP_GET_PARAM_RESP;
+    case OP_GET_PARAM:
+        apple_sio_control_get_param(s, &reply, m->param);
         break;
-    }
-    case OP_SET_PARAM: {
-        s->params[m->param] = m->data;
-        reply.op = OP_ACK;
-        break;
-    }
-    default:
+    case OP_SET_PARAM:
+        apple_sio_control_set_param(s, &reply, m->param, m->data);
         break;
     }
 
@@ -379,7 +400,7 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
     dma_addr_t config_addr;
     dma_addr_t segment_addr;
     uint32_t segment_count;
-    int i;
+    size_t i;
     SIODMAMapRequest *req;
     uint64_t bytes_accessed;
 
@@ -393,19 +414,18 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
 
     switch (m.op) {
     case OP_CONFIGURE: {
-        config_addr = (s->params[PARAM_SEGMENT_BASE] << 12) +
-                      m.data * sizeof(SIODMASegment);
+        config_addr = s->segment_base + m.data * sizeof(SIODMASegment);
         if (dma_memory_read(&s->dma_as, config_addr, &ep->config,
                             sizeof(ep->config),
-                            MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
-            return;
+                            MEMTXATTRS_UNSPECIFIED) == MEMTX_OK) {
+            reply.op = OP_ACK;
+        } else {
+            reply.op = OP_SYNC_ERROR;
         }
-        reply.op = OP_ACK;
         break;
     }
     case OP_MAP: {
-        segment_addr = (s->params[PARAM_SEGMENT_BASE] << 12) +
-                       m.data * sizeof(SIODMASegment);
+        segment_addr = s->segment_base + m.data * sizeof(SIODMASegment);
         if (dma_memory_read(&s->dma_as, segment_addr + 0x3C, &segment_count,
                             sizeof(segment_count),
                             MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
@@ -569,7 +589,6 @@ static void apple_sio_reset_hold(Object *obj, ResetType type)
 {
     AppleSIOState *s;
     AppleSIOClass *sioc;
-    uint32_t protocol;
 
     s = APPLE_SIO(obj);
     sioc = APPLE_SIO_GET_CLASS(obj);
@@ -578,11 +597,10 @@ static void apple_sio_reset_hold(Object *obj, ResetType type)
         sioc->parent_reset.hold(obj, type);
     }
 
-    protocol = s->params[PARAM_PROTOCOL_VERSION];
-    memset(s->params, 0, sizeof(s->params));
-    s->params[PARAM_PROTOCOL_VERSION] = protocol;
+    s->segment_base = 0;
+    s->segment_size = 0;
 
-    for (int i = 0; i < SIO_NUM_EPS; ++i) {
+    for (size_t i = 0; i < SIO_NUM_EPS; ++i) {
         apple_sio_stop(s, &s->eps[i]);
 
         memset(&s->eps[i].config, 0, sizeof(s->eps[i].config));
@@ -703,7 +721,9 @@ static const VMStateDescription vmstate_apple_sio = {
             VMSTATE_STRUCT_ARRAY(eps, AppleSIOState, SIO_NUM_EPS, 0,
                                  vmstate_apple_sio_dma_endpoint,
                                  AppleSIODMAEndpoint),
-            VMSTATE_UINT32_ARRAY(params, AppleSIOState, 0x100),
+            VMSTATE_UINT32(protocol_version, AppleSIOState),
+            VMSTATE_UINT64(segment_base, AppleSIOState),
+            VMSTATE_UINT32(segment_size, AppleSIOState),
             VMSTATE_END_OF_LIST(),
         },
 };
@@ -743,7 +763,7 @@ static void apple_sio_register_types(void)
 type_init(apple_sio_register_types);
 
 SysBusDevice *apple_sio_from_node(AppleDTNode *node, AppleA7IOPVersion version,
-                                  uint32_t protocol)
+                                  uint32_t protocol_version)
 {
     DeviceState *dev;
     AppleSIOState *s;
@@ -757,9 +777,10 @@ SysBusDevice *apple_sio_from_node(AppleDTNode *node, AppleA7IOPVersion version,
     s = APPLE_SIO(dev);
     sbd = SYS_BUS_DEVICE(dev);
     rtk = APPLE_RTKIT(dev);
+
     dev->id = g_strdup("sio");
 
-    s->params[PARAM_PROTOCOL_VERSION] = protocol;
+    s->protocol_version = protocol_version;
 
     child = apple_dt_get_node(node, "iop-sio-nub");
     g_assert_nonnull(child);
