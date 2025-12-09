@@ -44,7 +44,7 @@
     } while (0)
 #endif
 
-#define SIO_NUM_EPS (0xDB)
+#define SIO_NUM_EPS (0xDC)
 
 typedef struct {
     uint32_t xfer;
