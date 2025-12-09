@@ -767,9 +767,8 @@ void apple_boot_setup_monitor_boot_args(
     hwaddr kern_phys_base, hwaddr kern_phys_slide, hwaddr kern_virt_slide,
     hwaddr kern_text_section_off)
 {
-    AppleMonitorBootArgs boot_args;
+    AppleMonitorBootArgs boot_args = { 0 };
 
-    memset(&boot_args, 0, sizeof(boot_args));
     boot_args.version = 4;
     boot_args.virt_base = virt_base;
     boot_args.phys_base = phys_base;
@@ -792,7 +791,7 @@ static void apple_boot_setup_bootargs_rev2(
     hwaddr dtb_size, AppleVideoArgs *video_args, const char *cmdline,
     hwaddr mem_size_actual)
 {
-    AppleKernelBootArgsRev2 boot_args;
+    AppleKernelBootArgsRev2 boot_args = { 0 };
 
     boot_args.revision = 2;
     boot_args.version = 2;
@@ -811,7 +810,6 @@ static void apple_boot_setup_bootargs_rev2(
     boot_args.boot_flags = BOOT_FLAGS_DARK_BOOT;
     boot_args.mem_size_actual = mem_size_actual;
 
-
     // iOS 13: mem_size_actual is not a thing
     address_space_rw(
         as, addr, MEMTXATTRS_UNSPECIFIED, &boot_args,
@@ -826,7 +824,7 @@ static void apple_boot_setup_bootargs_rev3(
     hwaddr dtb_size, AppleVideoArgs *video_args, const char *cmdline,
     hwaddr mem_size_actual)
 {
-    AppleKernelBootArgsRev3 boot_args;
+    AppleKernelBootArgsRev3 boot_args = { 0 };
 
     boot_args.revision = 3;
     boot_args.version = 2;
