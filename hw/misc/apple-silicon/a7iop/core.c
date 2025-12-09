@@ -95,14 +95,12 @@ void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
 
     qemu_mutex_init(&s->lock);
 
-    memset(name, 0, sizeof(name));
     snprintf(name, sizeof(name), "%s-iop", s->role);
     s->iop_mailbox = apple_a7iop_mailbox_new(name, version, NULL, NULL, s,
                                              handle_messages_func);
     object_property_add_child(OBJECT(dev), "iop-mailbox",
                               OBJECT(s->iop_mailbox));
 
-    memset(name, 0, sizeof(name));
     snprintf(name, sizeof(name), "%s-ap", s->role);
     s->ap_mailbox = apple_a7iop_mailbox_new(name, version, s->iop_mailbox, NULL,
                                             NULL, NULL);

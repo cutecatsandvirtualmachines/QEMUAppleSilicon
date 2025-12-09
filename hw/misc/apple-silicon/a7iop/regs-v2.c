@@ -118,7 +118,6 @@ void apple_a7iop_init_mmio_v2(AppleA7IOP *s, uint64_t mmio_size)
 
     sbd = SYS_BUS_DEVICE(s);
 
-    memset(name, 0, sizeof(name));
     snprintf(name, sizeof(name), TYPE_APPLE_A7IOP ".%s.regs", s->role);
     memory_region_init_io(&s->mmio, OBJECT(s), &apple_a7iop_v2_reg_ops, s, name,
                           mmio_size);
