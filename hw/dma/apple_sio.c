@@ -414,19 +414,19 @@ static void apple_sio_dma(AppleSIOState *s, AppleSIODMAEndpoint *ep,
         }
 
         req = g_new0(SIODMAMapRequest, 1);
-        qemu_sglist_init(&req->sgl, DEVICE(s), segment_count, &s->dma_as);
-        req->tag = m.tag;
-        req->segment_count = segment_count;
         req->segments = g_new(SIODMASegment, segment_count);
         if (dma_memory_read(&s->dma_as, segment_addr + 0x48, req->segments,
                             segment_count * sizeof(SIODMASegment),
                             MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
             g_free(req->segments);
-            qemu_sglist_destroy(&req->sgl);
             g_free(req);
             reply.op = OP_SYNC_ERROR;
             break;
         }
+
+        qemu_sglist_init(&req->sgl, DEVICE(s), segment_count, &s->dma_as);
+        req->tag = m.tag;
+        req->segment_count = segment_count;
         for (i = 0; i < segment_count; ++i) {
             qemu_sglist_add(&req->sgl, req->segments[i].addr,
                             req->segments[i].len);
