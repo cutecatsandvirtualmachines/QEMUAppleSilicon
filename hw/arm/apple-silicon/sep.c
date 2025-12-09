@@ -4372,7 +4372,9 @@ static void answer_cmd_0x0_init1(struct AppleSSCState *ssc_state,
         goto jump_ret1;
     }
     do_response_prefix(request, response, SSC_RESPONSE_FLAG_OK);
-    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index],
+    const char *priv_str = "222222222222222222222222222222222222222222222222"
+                           "222222222222222222222222222222222222222222222222";
+    if (generate_ec_priv(ssc_state, priv_str, &ssc_state->ecc_keys[kbkdf_index],
                          &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
@@ -4450,7 +4452,9 @@ static void answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state,
         do_response_prefix(request, response, SSC_RESPONSE_FLAG_CURVE_INVALID);
         goto jump_ret1;
     }
-    if (generate_ec_priv(ssc_state, NULL, &ssc_state->ecc_keys[kbkdf_index],
+    const char *priv_str = "333333333333333333333333333333333333333333333333"
+                           "333333333333333333333333333333333333333333333333";
+    if (generate_ec_priv(ssc_state, priv_str, &ssc_state->ecc_keys[kbkdf_index],
                          &ecc_pub) != 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: generate_ec_priv failed\n",
                       __func__);
@@ -4777,8 +4781,8 @@ static void answer_cmd_0x7_init0(struct AppleSSCState *ssc_state,
     struct ecc_point ecc_pub;
     DPRINTF("%s: entered function\n", __func__);
 
-    const char *priv_str = "cccccccccccccccccccccccccccccccccccccccccccccccc"
-                           "cccccccccccccccccccccccccccccccccccccccccccccccc";
+    const char *priv_str = "111111111111111111111111111111111111111111111111"
+                           "111111111111111111111111111111111111111111111111";
     // no NULL here, this should stay static
     if (generate_ec_priv(ssc_state, priv_str, &ssc_state->ecc_key_main,
                          &ecc_pub) != 0) {
