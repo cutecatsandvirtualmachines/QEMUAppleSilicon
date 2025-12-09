@@ -777,7 +777,7 @@ SysBusDevice *apple_sio_from_node(AppleDTNode *node, AppleA7IOPVersion version,
     reg = (uint64_t *)prop->data;
 
     apple_rtkit_init(rtk, NULL, "SIO", reg[1], version, NULL);
-    apple_rtkit_register_user_ep(rtk, EP_CONTROL, s, apple_sio_handle_endpoint);
+    apple_rtkit_register_user_ep(rtk, 0, s, apple_sio_handle_endpoint);
 
     memory_region_init_io(&s->ascv2_iomem, OBJECT(dev), &ascv2_core_reg_ops, s,
                           TYPE_APPLE_SIO ".ascv2-core-reg", reg[3]);
