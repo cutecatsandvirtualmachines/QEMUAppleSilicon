@@ -57,7 +57,8 @@
     } while (0)
 #endif
 
-#ifdef DEBUG_DWC3
+// #ifdef DEBUG_DWC3
+#if 1
 static const char *TRBControlType_names[] = {
     [TRBCTL_RESERVED] = "TRBCTL_RESERVED",
     [TRBCTL_NORMAL] = "TRBCTL_NORMAL",
