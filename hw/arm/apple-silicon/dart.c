@@ -1,22 +1,46 @@
+/*
+ * Apple Device Address Resolution Table.
+ *
+ * Copyright (c) 2024-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "qemu/osdep.h"
 #include "hw/arm/apple-silicon/dart.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/irq.h"
+#include "hw/qdev-core.h"
 #include "hw/sysbus.h"
 #include "migration/vmstate.h"
 #include "monitor/hmp-target.h"
 #include "monitor/monitor.h"
-#include "qapi/qmp/qdict.h"
+#include "qapi/error.h"
 #include "qemu/bitops.h"
 #include "qemu/module.h"
-#include "sysemu/dma.h"
+#include "qobject/qdict.h"
+#include "system/dma.h"
 
-// #define DEBUG_DART
-
-#ifdef DEBUG_DART
-#define DPRINTF(fmt, ...)                    \
-    do {                                     \
-        printf("dart: " fmt, ##__VA_ARGS__); \
+#if 0
+#define DPRINTF(fmt, ...)                             \
+    do {                                              \
+        fprintf(stderr, "dart: " fmt, ##__VA_ARGS__); \
     } while (0)
 #else
 #define DPRINTF(fmt, ...) \
@@ -29,64 +53,62 @@
 #define DART_MAX_TTBR 4
 #define DART_MAX_VA_BITS 38
 
-#define DART_PARAMS1 (0x0)
-#define DART_PARAMS1_PAGE_SHIFT(_x) (((_x) & 0xf) << 24)
+#define REG_DART_PARAMS1 (0x0)
+#define DART_PARAMS1_PAGE_SHIFT(_x) (((_x) & 0xF) << 24)
 
-#define DART_PARAMS2 (0x4)
-#define DART_PARAMS2_BYPASS_SUPPORT (0x1)
+#define REG_DART_PARAMS2 (0x4)
+#define DART_PARAMS2_BYPASS_SUPPORT BIT32(0)
 
-#define DART_TLB_OP (0x20)
-#define DART_TLB_OP_BUSY (1 << 2)
-#define DART_TLB_OP_INVALIDATE (1 << 20)
+#define REG_DART_TLB_OP (0x20)
+#define DART_TLB_OP_BUSY BIT32(2)
+#define DART_TLB_OP_INVALIDATE BIT32(20)
 
-#define DART_SID_MASK_LOW (0x34)
-#define DART_SID_MASK_HIGH (0x38)
-#define DART_ERROR_STATUS (0x40)
+#define REG_DART_SID_MASK_LOW (0x34)
+#define REG_DART_SID_MASK_HIGH (0x38)
+#define REG_DART_ERROR_STATUS (0x40)
 #define DART_ERROR_STREAM_SHIFT (24)
 #define DART_ERROR_STREAM_LENGTH (4)
-#define DART_ERROR_STREAM(_x) (((_x) & 0xf) << 24)
-#define DART_ERROR_CODE(_x) (((_x) & 0xf) << 0)
-#define DART_ERROR_FLAG (1 << 31)
-#define DART_ERROR_APF_REJECT (1 << 11)
-#define DART_ERROR_UNKNOWN (1 << 9)
-#define DART_ERROR_CTRR_WRITE_PROT (1 << 8)
-#define DART_ERROR_REGION_PROT (1 << 7)
-#define DART_ERROR_AXI_SLV_ERR (1 << 6)
-#define DART_ERROR_AXI_SLV_DECODE (1 << 5)
-#define DART_ERROR_READ_PROT (1 << 4)
-#define DART_ERROR_WRITE_PROT (1 << 3)
-#define DART_ERROR_PTE_INVLD (1 << 2)
-#define DART_ERROR_L2E_INVLD (1 << 1)
-#define DART_ERROR_TTBR_INVLD (1 << 0)
-#define DART_ERROR_ADDRESS_LO (0x50)
-#define DART_ERROR_ADDRESS_HI (0x54)
-#define DART_CONFIG (0x60)
+#define DART_ERROR_FLAG BIT32(31)
+#define DART_ERROR_APF_REJECT BIT32(11)
+#define DART_ERROR_UNKNOWN BIT32(9)
+#define DART_ERROR_CTRR_WRITE_PROT BIT32(8)
+#define DART_ERROR_REGION_PROT BIT32(7)
+#define DART_ERROR_AXI_SLV_ERR BIT32(6)
+#define DART_ERROR_AXI_SLV_DECODE BIT32(5)
+#define DART_ERROR_READ_PROT BIT32(4)
+#define DART_ERROR_WRITE_PROT BIT32(3)
+#define DART_ERROR_PTE_INVLD BIT32(2)
+#define DART_ERROR_L2E_INVLD BIT32(1)
+#define DART_ERROR_TTBR_INVLD BIT32(0)
+#define REG_DART_ERROR_ADDRESS_LO (0x50)
+#define REG_DART_ERROR_ADDRESS_HI (0x54)
+#define REG_DART_CONFIG (0x60)
 #define DART_CONFIG_LOCK (1 << 15)
 
 #define DART_SID_REMAP(sid4) (0x80 + 4 * (sid4))
 
-#define DART_TCR(sid) (0x100 + 4 * (sid))
-#define DART_TCR_TXEN (1 << 7)
-#define DART_TCR_BYPASS_DART (1 << 8)
-#define DART_TCR_BYPASS_DAPF (1 << 12)
+#define REG_DART_TCR(sid) (0x100 + 4 * (sid))
+#define DART_TCR_TXEN BIT32(7)
+#define DART_TCR_BYPASS_DART BIT32(8)
+#define DART_TCR_BYPASS_DAPF BIT32(12)
 
-#define DART_TTBR(sid, idx) (0x200 + 16 * (sid) + 4 * (idx))
-#define DART_TTBR_VALID (1 << 31)
+#define REG_DART_TTBR(sid, idx) (0x200 + 16 * (sid) + 4 * (idx))
+#define DART_TTBR_VALID BIT32(31)
 #define DART_TTBR_SHIFT 12
 #define DART_TTBR_MASK 0xFFFFFFF
 
-#define DART_TTE_NO_WRITE (1 << 7)
-#define DART_TTE_NO_READ (1 << 8)
-#define DART_TTE_AP_MASK (3 << 7)
-#define DART_TTE_VALID (1 << 0)
-#define DART_TTE_TYPE_TABLE (1 << 0)
-#define DART_TTE_TYPE_BLOCK (3 << 0)
-#define DART_TTE_TYPE_MASK (0x3)
-#define DART_TTE_ADDR_MASK (0xFFFFFFFFFFull)
+#define DART_PTE_NO_WRITE (1 << 7)
+#define DART_PTE_NO_READ (1 << 8)
+#define DART_PTE_AP_MASK (3 << 7)
+#define DART_PTE_VALID (1 << 0)
+#define DART_PTE_TYPE_TABLE (1 << 0)
+#define DART_PTE_TYPE_BLOCK (3 << 0)
+#define DART_PTE_TYPE_MASK (0x3)
+#define DART_PTE_ADDR_MASK (0xFFFFFFFFFFull)
 
 #define DART_IOTLB_SID_SHIFT (53)
-#define DART_IOTLB_SID(_x) (((_x) & 0xfull) << 53)
-#define DART_IOTLB_SID_EX(_x) (((_x) >> 53) & 0xf)
+#define DART_IOTLB_SID(_x) (((_x) & 0xFull) << DART_IOTLB_SID_SHIFT)
+#define GET_DART_IOTLB_SID(_x) (((_x) >> DART_IOTLB_SID_SHIFT) & 0xF)
 
 typedef enum {
     DART_UNKNOWN = 0,
@@ -153,7 +175,6 @@ struct AppleDARTInstance {
 
 struct AppleDARTState {
     SysBusDevice parent_obj;
-    char name[0x20];
     qemu_irq irq;
     AppleDARTInstance instances[DART_MAX_INSTANCE];
     uint32_t num_instances;
@@ -166,7 +187,60 @@ struct AppleDARTState {
     uint32_t sids;
     uint32_t bypass;
     uint64_t bypass_address;
+    uint32_t dart_options;
+    bool dart_force_active_val;
+    bool dart_request_sid_val;
+    bool dart_release_sid_val;
+    bool dart_self_val;
 };
+
+static void dart_force_active(void *opaque, int n, int level)
+{
+    AppleDARTState *s = opaque;
+    bool val = !!level;
+    assert(n == 0);
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_force_active_val, val);
+    if (s->dart_force_active_val != val) {
+        //
+    }
+    s->dart_force_active_val = val;
+}
+
+static void dart_request_sid(void *opaque, int n, int level)
+{
+    AppleDARTState *s = opaque;
+    bool val = !!level;
+    assert(n == 0);
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_request_sid_val, val);
+    if (s->dart_request_sid_val != val) {
+        //
+    }
+    s->dart_request_sid_val = val;
+}
+
+static void dart_release_sid(void *opaque, int n, int level)
+{
+    AppleDARTState *s = opaque;
+    bool val = !!level;
+    assert(n == 0);
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_release_sid_val, val);
+    if (s->dart_release_sid_val != val) {
+        //
+    }
+    s->dart_release_sid_val = val;
+}
+
+static void dart_self(void *opaque, int n, int level)
+{
+    AppleDARTState *s = opaque;
+    bool val = !!level;
+    assert(n == 0);
+    DPRINTF("%s: old: %d ; new %d\n", __func__, s->dart_self_val, val);
+    if (s->dart_self_val != val) {
+        //
+    }
+    s->dart_self_val = val;
+}
 
 static int apple_dart_device_list(Object *obj, void *opaque)
 {
@@ -194,7 +268,7 @@ static gboolean apple_dart_tlb_remove_by_sid_mask(gpointer key, gpointer value,
     hwaddr va = (hwaddr)key;
     uint64_t sid_mask = *(uint64_t *)user_data;
 
-    if ((1ULL << DART_IOTLB_SID_EX(va)) & sid_mask) {
+    if ((1ULL << GET_DART_IOTLB_SID(va)) & sid_mask) {
         return true;
     }
     return false;
@@ -209,28 +283,22 @@ static void apple_dart_update_irq(AppleDARTState *s)
             level |= (o->error_status != 0);
         }
     }
-#ifndef DEBUG_DART
     qemu_set_irq(s->irq, level);
-#endif /* DEBUG_DART */
 }
 
 static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                            unsigned size)
 {
-    AppleDARTInstance *o = (AppleDARTInstance *)opaque;
+    AppleDARTInstance *o = opaque;
     AppleDARTState *s = o->s;
-    uint32_t orig;
     uint32_t val = data;
-    bool iflg = 0;
     DPRINTF("%s[%d]: (%s) %s @ 0x" HWADDR_FMT_plx " value: 0x" HWADDR_FMT_plx
             "\n",
             s->name, o->id, dart_instance_name[o->type], __func__, addr, data);
 
-    orig = o->base_reg[addr >> 2];
-
     if (o->type == DART_DART) {
         switch (addr) {
-        case DART_TLB_OP:
+        case REG_DART_TLB_OP:
             if (val & DART_TLB_OP_INVALIDATE) {
                 IOMMUTLBEvent event;
                 uint64_t sid_mask = o->sid_mask;
@@ -264,31 +332,35 @@ static void base_reg_write(void *opaque, hwaddr addr, uint64_t data,
                 return;
             }
             break;
-        case DART_ERROR_STATUS:
-            val = orig & (~val);
-            iflg = 1;
-            break;
+        case REG_DART_ERROR_STATUS:
+            val = o->error_status & (~val);
+            apple_dart_update_irq(s);
+            return;
         }
     }
     o->base_reg[addr >> 2] = val;
-    if (iflg) {
-        apple_dart_update_irq(s);
-    }
 }
 
 static uint64_t base_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleDARTInstance *o = (AppleDARTInstance *)opaque;
+    AppleDARTInstance *o = opaque;
+    AppleDARTState *s = o->s;
     DPRINTF("%s[%d]: (%s) %s @ 0x" HWADDR_FMT_plx "\n", o->s->name, o->id,
             dart_instance_name[o->type], __func__, addr);
 
     if (o->type == DART_DART) {
         switch (addr) {
-        case DART_TLB_OP:
+        case REG_DART_PARAMS1: {
+            // TODO: added hack against panic
+            bool access_region_protection = (s->dart_options & 0x2) != 0;
+            return o->base_reg[addr >> 2] | (access_region_protection << 31);
+        }
+        case REG_DART_TLB_OP:
             return qatomic_read(&o->tlb_op);
+        case REG_DART_ERROR_STATUS:
+            return o->error_status;
         default:
             return o->base_reg[addr >> 2];
-            break;
         }
     }
     return 0;
@@ -339,20 +411,20 @@ static AppleDARTTLBEntry *apple_dart_ptw(AppleDARTInstance *o, uint32_t sid,
         DPRINTF("%s: level: %d, pa: 0x" HWADDR_FMT_plx " pte: 0x%llx(0x%llx)\n",
                 __func__, level, pa, pte, idx);
 
-        if ((pte & DART_TTE_VALID) == 0) {
+        if ((pte & DART_PTE_VALID) == 0) {
             err_status = (DART_ERROR_FLAG | DART_ERROR_PTE_INVLD);
             pa = 0;
             pte = 0;
             break;
         }
-        pa = pte & s->page_mask & DART_TTE_ADDR_MASK;
+        pa = pte & s->page_mask & DART_PTE_ADDR_MASK;
     }
 
-    if ((pte & DART_TTE_VALID)) {
+    if ((pte & DART_PTE_VALID)) {
         tlb_entry = g_new0(AppleDARTTLBEntry, 1);
-        tlb_entry->block_addr = (pte & s->page_mask & DART_TTE_ADDR_MASK);
-        tlb_entry->perm = IOMMU_ACCESS_FLAG(!(pte & DART_TTE_NO_READ),
-                                            !(pte & DART_TTE_NO_WRITE));
+        tlb_entry->block_addr = (pte & s->page_mask & DART_PTE_ADDR_MASK);
+        tlb_entry->perm = IOMMU_ACCESS_FLAG(!(pte & DART_PTE_NO_READ),
+                                            !(pte & DART_PTE_NO_WRITE));
     } else {
         err_status = (DART_ERROR_FLAG | DART_ERROR_PTE_INVLD);
     }
@@ -488,6 +560,23 @@ static void apple_dart_reset(DeviceState *dev)
             break;
         }
     }
+
+    s->dart_force_active_val = 0;
+    s->dart_request_sid_val = 0;
+    s->dart_release_sid_val = 0;
+    s->dart_self_val = 0;
+}
+
+static void apple_dart_realize(DeviceState *dev, Error **errp)
+{
+    AppleDARTState *s = APPLE_DART(dev);
+
+#if 0
+        qdev_init_gpio_in_named(DEVICE(s), dart_force_active, DART_FORCE_ACTIVE, 1);
+        qdev_init_gpio_in_named(DEVICE(s), dart_request_sid, DART_REQUEST_SID, 1);
+        qdev_init_gpio_in_named(DEVICE(s), dart_release_sid, DART_RELEASE_SID, 1);
+        qdev_init_gpio_in_named(DEVICE(s), dart_self, DART_SELF, 1);
+#endif
 }
 
 IOMMUMemoryRegion *apple_dart_iommu_mr(AppleDARTState *s, uint32_t sid)
@@ -520,12 +609,12 @@ IOMMUMemoryRegion *apple_dart_instance_iommu_mr(AppleDARTState *s,
     return NULL;
 }
 
-AppleDARTState *apple_dart_create(DTBNode *node)
+AppleDARTState *apple_dart_from_node(AppleDTNode *node)
 {
     DeviceState *dev;
     AppleDARTState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
     uint32_t *instance;
     int i;
@@ -534,60 +623,53 @@ AppleDARTState *apple_dart_create(DTBNode *node)
     s = APPLE_DART(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    prop = find_dtb_prop(node, "name");
-    g_strlcpy(s->name, (char *)prop->value, sizeof(s->name));
-    dev->id = g_strdup((char *)prop->value);
+    dev->id = apple_dt_get_prop_strdup(node, "name", &error_fatal);
 
-    prop = find_dtb_prop(node, "page-size");
-    if (!prop || prop->length < 4) {
-        s->page_shift = 12;
-    } else {
-        s->page_shift = 31 - clz32(*(uint32_t *)prop->value);
-    }
-    s->page_size = 1 << s->page_shift;
+    s->page_size =
+        apple_dt_get_prop_u32_or(node, "page-size", 0x1000, &error_fatal);
+    s->page_shift = 31 - clz32(s->page_size);
     s->page_bits = s->page_size - 1;
     s->page_mask = ~s->page_bits;
 
     switch (s->page_shift) {
     case 12:
-        memcpy(s->l_mask, (uint32_t[3]){ 0xc0000, 0x3fe00, 0x1ff }, 12);
+        memcpy(s->l_mask, (uint32_t[3]){ 0xC0000, 0x3FE00, 0x1FF }, 12);
         memcpy(s->l_shift, (uint32_t[3]){ 0x12, 9, 0 }, 12);
         break;
     case 14:
-        memcpy(s->l_mask, (uint32_t[3]){ 0xc00000, 0x3ff800, 0x7ff }, 12);
+        memcpy(s->l_mask, (uint32_t[3]){ 0xC00000, 0x3FF800, 0x7FF }, 12);
         memcpy(s->l_shift, (uint32_t[3]){ 0x16, 11, 0 }, 12);
         break;
     default:
         g_assert_not_reached();
     }
 
-    prop = find_dtb_prop(node, "sids");
-    if (prop && prop->length >= 4) {
-        s->sids = *(uint32_t *)prop->value;
+    s->sids = apple_dt_get_prop_u32_or(node, "sids", 0xFFFF, &error_fatal);
+    s->bypass = apple_dt_get_prop_u32_or(node, "bypass", 0, &error_fatal);
+    s->bypass_address =
+        apple_dt_get_prop_u64_or(node, "bypass-address", 0, &error_warn);
+    s->dart_options =
+        apple_dt_get_prop_u32_or(node, "dart-options", 0, &error_fatal);
+
+    prop = apple_dt_get_prop(node, "instance");
+    if (prop == NULL) {
+        if (apple_dt_get_prop_u32_or(node, "smmu-present", 0, &error_fatal) !=
+            1) {
+            instance = (uint32_t *)"TRADDART\0\0\0";
+        } else {
+            instance = (uint32_t *)"TRADDART\0\0\0\0UMMSSMMU\0\0\0";
+        }
+    } else {
+        g_assert_cmpuint(prop->len % 12, ==, 0);
+        instance = (uint32_t *)prop->data;
     }
 
-    prop = find_dtb_prop(node, "bypass");
-    if (prop && prop->length >= 4) {
-        s->bypass = *(uint32_t *)prop->value;
-    }
-
-    prop = find_dtb_prop(node, "bypass-address");
-    if (prop && prop->length >= 8) {
-        s->bypass_address = *(uint64_t *)prop->value;
-    }
-
-    prop = find_dtb_prop(node, "instance");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
-    g_assert_cmpuint((prop->length / 12) * 12, ==, prop->length);
-    instance = (uint32_t *)prop->value;
 
-    prop = find_dtb_prop(node, "reg");
-    g_assert_nonnull(prop);
+    reg = (uint64_t *)prop->data;
 
-    reg = (uint64_t *)prop->value;
-
-
-    for (i = 0; i < prop->length / 16; i++) {
+    for (i = 0; i < prop->len / 16; i++) {
         AppleDARTInstance *o = &s->instances[i];
         s->num_instances++;
         o->id = i;
@@ -595,6 +677,7 @@ AppleDARTState *apple_dart_create(DTBNode *node)
         memory_region_init_io(&o->iomem, OBJECT(dev), &base_reg_ops, o,
                               TYPE_APPLE_DART ".reg", reg[i * 2 + 1]);
         sysbus_init_mmio(sbd, &o->iomem);
+        qemu_mutex_init(&o->mutex);
 
         switch (*instance) {
         case 'DART': {
@@ -603,7 +686,7 @@ AppleDARTState *apple_dart_create(DTBNode *node)
             for (int j = 0; j < DART_MAX_STREAMS; j++) {
                 if ((1 << j) & s->sids) {
                     g_autofree char *name =
-                        g_strdup_printf("%s-%d-%d", s->name, o->id, j);
+                        g_strdup_printf("%s-%d-%d", DEVICE(s)->id, o->id, j);
                     o->iommus[j] = g_new0(AppleDARTIOMMUMemoryRegion, 1);
                     o->iommus[j]->sid = j;
                     o->iommus[j]->o = o;
@@ -611,8 +694,6 @@ AppleDARTState *apple_dart_create(DTBNode *node)
                         o->iommus[j], sizeof(AppleDARTIOMMUMemoryRegion),
                         TYPE_APPLE_DART_IOMMU_MEMORY_REGION, OBJECT(s), name,
                         1ULL << DART_MAX_VA_BITS);
-
-                    qemu_mutex_init(&o->mutex);
                 }
             }
             break;
@@ -642,20 +723,22 @@ static void apple_dart_dump_pt(Monitor *mon, AppleDARTInstance *o, hwaddr iova,
 {
     AppleDARTState *s = o->s;
     if (level == 3) {
-        monitor_printf(mon, "\t\t\t0x" HWADDR_FMT_plx " ... 0x" HWADDR_FMT_plx " -> 0x%llx %c%c\n",
+        monitor_printf(mon,
+                       "\t\t\t0x" HWADDR_FMT_plx " ... 0x" HWADDR_FMT_plx
+                       " -> 0x%llx %c%c\n",
                        iova << s->page_shift, (iova + 1) << s->page_shift,
-                       pte & s->page_mask & DART_TTE_ADDR_MASK,
-                       pte & DART_TTE_NO_READ ? '-' : 'r',
-                       pte & DART_TTE_NO_WRITE ? '-' : 'w');
+                       pte & s->page_mask & DART_PTE_ADDR_MASK,
+                       pte & DART_PTE_NO_READ ? '-' : 'r',
+                       pte & DART_PTE_NO_WRITE ? '-' : 'w');
         return;
     }
 
     for (uint64_t i = 0; i <= (s->l_mask[level] >> s->l_shift[level]); i++) {
         uint64_t pte2 = entries[i];
 
-        if ((pte2 & DART_TTE_VALID) ||
+        if ((pte2 & DART_PTE_VALID) ||
             ((level == 0) && (pte2 & DART_TTBR_VALID))) {
-            uint64_t pa = pte2 & s->page_mask & DART_TTE_ADDR_MASK;
+            uint64_t pa = pte2 & s->page_mask & DART_PTE_ADDR_MASK;
             if (level == 0) {
                 pa = (pte2 & DART_TTBR_MASK) << DART_TTBR_SHIFT;
             }
@@ -747,7 +830,7 @@ static const VMStateDescription vmstate_apple_dart_instance = {
     .version_id = 1,
     .minimum_version_id = 1,
     .fields =
-        (VMStateField[]){
+        (const VMStateField[]){
             VMSTATE_UINT32_ARRAY(base_reg, AppleDARTInstance,
                                  0x4000 / sizeof(uint32_t)),
             VMSTATE_END_OF_LIST(),
@@ -760,7 +843,7 @@ static const VMStateDescription vmstate_apple_dart = {
     .minimum_version_id = 1,
     .priority = MIG_PRI_IOMMU,
     .fields =
-        (VMStateField[]){
+        (const VMStateField[]){
             VMSTATE_STRUCT_ARRAY(instances, AppleDARTState, DART_MAX_INSTANCE,
                                  1, vmstate_apple_dart_instance,
                                  AppleDARTInstance),
@@ -769,17 +852,18 @@ static const VMStateDescription vmstate_apple_dart = {
         }
 };
 
-static void apple_dart_class_init(ObjectClass *klass, void *data)
+static void apple_dart_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
-    dc->reset = apple_dart_reset;
+    dc->realize = apple_dart_realize;
+    device_class_set_legacy_reset(dc, apple_dart_reset);
     dc->desc = "Apple DART IOMMU";
     dc->vmsd = &vmstate_apple_dart;
 }
 
 static void apple_dart_iommu_memory_region_class_init(ObjectClass *klass,
-                                                      void *data)
+                                                      const void *data)
 {
     IOMMUMemoryRegionClass *imrc = IOMMU_MEMORY_REGION_CLASS(klass);
 

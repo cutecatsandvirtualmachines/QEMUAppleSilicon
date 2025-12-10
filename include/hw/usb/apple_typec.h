@@ -1,13 +1,13 @@
 #ifndef APPLE_TYPEC_H
 #define APPLE_TYPEC_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 #include "hw/usb/hcd-dwc2.h"
 #include "hw/usb/hcd-dwc3.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_TYPEC "apple.typec"
+#define TYPE_APPLE_TYPEC "apple-typec"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleTypeCState, APPLE_TYPEC)
 
 #define ATC_USB_MMIO_SIZE (0x200000)
@@ -27,5 +27,5 @@ typedef struct AppleTypeCState {
     SysBusDevice *host;
 } AppleTypeCState;
 
-DeviceState *apple_typec_create(DTBNode *node);
+DeviceState *apple_typec_create(AppleDTNode *node);
 #endif

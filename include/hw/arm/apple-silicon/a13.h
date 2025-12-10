@@ -1,8 +1,8 @@
 /*
  * Apple A13 CPU.
  *
- * Copyright (c) 2023-2024 Visual Ehrmanntraut (VisualEhrmanntraut).
- * Copyright (c) 2023 Christian Inci (chris-pcguy).
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ * Copyright (c) 2023-2025 Christian Inci (chris-pcguy).
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,16 +22,14 @@
 #define HW_ARM_APPLE_SILICON_A13_H
 
 #include "qemu/osdep.h"
-#include "exec/hwaddr.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/cpu/cluster.h"
 #include "qemu/queue.h"
 #include "cpu.h"
+#include "system/memory.h"
 
 #define A13_MAX_CPU 6
 #define A13_MAX_CLUSTER 2
-#define A13_NUM_ECORE 2
-#define A13_NUM_PCORE 4
 
 #define TYPE_APPLE_A13 "apple-a13-cpu"
 OBJECT_DECLARE_TYPE(AppleA13State, AppleA13Class, APPLE_A13)
@@ -51,7 +49,7 @@ typedef struct AppleA13Class {
     /*< public >*/
     DeviceRealize parent_realize;
     DeviceUnrealize parent_unrealize;
-    DeviceReset parent_reset;
+    ResettablePhases parent_phases;
 } AppleA13Class;
 
 typedef struct AppleA13State {
@@ -59,16 +57,12 @@ typedef struct AppleA13State {
     ARMCPU parent_obj;
 
     /*< public >*/
-    MemoryRegion impl_reg;
-    MemoryRegion coresight_reg;
     MemoryRegion memory;
     MemoryRegion sysmem;
     uint32_t cpu_id;
     uint32_t phys_id;
     uint32_t cluster_id;
-    uint64_t mpidr;
     uint64_t ipi_sr;
-    hwaddr cluster_reg[2];
     qemu_irq fast_ipi;
     A13_CPREG_VAR_DEF(ARM64_REG_EHID3);
     A13_CPREG_VAR_DEF(ARM64_REG_EHID4);
@@ -86,6 +80,11 @@ typedef struct AppleA13State {
     A13_CPREG_VAR_DEF(ARM64_REG_HID14);
     A13_CPREG_VAR_DEF(ARM64_REG_HID16);
     A13_CPREG_VAR_DEF(ARM64_REG_LSU_ERR_STS);
+    A13_CPREG_VAR_DEF(ARM64_REG_LSU_ERR_STS_);
+    A13_CPREG_VAR_DEF(ARM64_REG_FED_ERR_STS);
+    A13_CPREG_VAR_DEF(ARM64_REG_LLC_ERR_STS);
+    A13_CPREG_VAR_DEF(ARM64_REG_LLC_ERR_INF);
+    A13_CPREG_VAR_DEF(ARM64_REG_LLC_ERR_ADR);
     A13_CPREG_VAR_DEF(IMP_BARRIER_LBSY_BST_SYNC_W0_EL0);
     A13_CPREG_VAR_DEF(IMP_BARRIER_LBSY_BST_SYNC_W1_EL0);
     A13_CPREG_VAR_DEF(ARM64_REG_3_3_15_7);
@@ -100,6 +99,7 @@ typedef struct AppleA13State {
     A13_CPREG_VAR_DEF(ARM64_REG_CYC_OVRD);
     A13_CPREG_VAR_DEF(ARM64_REG_ACC_CFG);
     A13_CPREG_VAR_DEF(S3_5_c15_c10_1);
+    A13_CPREG_VAR_DEF(SYS_ACC_PWR_DN_SAVE);
     /* uncore */
     A13_CPREG_VAR_DEF(UPMPCM);
     A13_CPREG_VAR_DEF(UPMCR0);
@@ -108,8 +108,6 @@ typedef struct AppleA13State {
 
 typedef struct AppleA13Cluster {
     CPUClusterState parent_obj;
-    hwaddr base;
-    hwaddr size;
     uint32_t cluster_type;
     MemoryRegion mr;
     AppleA13State *cpus[A13_MAX_CPU];
@@ -126,13 +124,14 @@ typedef struct AppleA13Cluster {
     A13_CPREG_VAR_DEF(CTRR_LOCK_EL1);
 } AppleA13Cluster;
 
-AppleA13State *apple_a13_cpu_create(DTBNode *node, char *name, uint32_t cpu_id,
-                                    uint32_t phys_id, uint32_t cluster_id,
-                                    uint8_t cluster_type);
-bool apple_a13_cpu_is_sleep(AppleA13State *tcpu);
-bool apple_a13_cpu_is_powered_off(AppleA13State *tcpu);
-void apple_a13_cpu_start(AppleA13State *tcpu);
-void apple_a13_cpu_reset(AppleA13State *tcpu);
-void apple_a13_cpu_off(AppleA13State *tcpu);
+AppleA13State *apple_a13_create(const char *name, uint32_t cpu_id,
+                                uint32_t phys_id, uint32_t cluster_id,
+                                uint16_t cluster_type);
+AppleA13State *apple_a13_from_node(AppleDTNode *node);
+bool apple_a13_is_asleep(AppleA13State *acpu);
+bool apple_a13_is_off(AppleA13State *acpu);
+void apple_a13_set_on(AppleA13State *acpu);
+void apple_a13_reset(AppleA13State *acpu);
+void apple_a13_set_off(AppleA13State *acpu);
 
 #endif /* HW_ARM_APPLE_SILICON_A13_H */

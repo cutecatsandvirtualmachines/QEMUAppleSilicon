@@ -1,8 +1,8 @@
 /*
  * Apple SEP.
  *
- * Copyright (c) 2023-2024 Visual Ehrmanntraut.
- * Copyright (c) 2023-2024 Christian Inci.
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut.
+ * Copyright (c) 2023-2025 Christian Inci.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,49 +22,53 @@
 #define HW_ARM_APPLE_SILICON_SEP_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
+#include "hw/i2c/i2c.h"
 #include "hw/misc/apple-silicon/a7iop/core.h"
 #include "hw/sysbus.h"
-#include "qemu/typedefs.h"
 #include "qom/object.h"
 #include "cpu-qom.h"
-#include "hw/i2c/i2c.h"
-#include "hw/nvram/eeprom_at24c.h"
-#include <nettle/drbg-ctr.h>
-
-#include <nettle/cmac.h>
-#include <nettle/ccm.h>
-#include <nettle/ecc.h>
-#include <nettle/ecc-curve.h>
-#include <nettle/knuth-lfib.h>
-#include <nettle/ecdsa.h>
-#include <nettle/sha2.h>
-#include <nettle/hmac.h>
-#include <nettle/hkdf.h>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
-#include <sys/param.h>
-#include <endian.h>
-#include <assert.h>
+#include "nettle/drbg-ctr.h"
+#include "nettle/ecc.h"
+#include "nettle/knuth-lfib.h"
+#include "nettle/sha2.h"
+#include "stdbool.h"
+#include "stdint.h"
 
 #define TYPE_APPLE_SEP "apple-sep"
 OBJECT_DECLARE_TYPE(AppleSEPState, AppleSEPClass, APPLE_SEP)
 
 #define TYPE_APPLE_SSC "apple-ssc"
 typedef struct AppleSSCState AppleSSCState;
-DECLARE_INSTANCE_CHECKER(AppleSSCState, APPLE_SSC,
-                         TYPE_APPLE_SSC)
+DECLARE_INSTANCE_CHECKER(AppleSSCState, APPLE_SSC, TYPE_APPLE_SSC)
 
-//#define TRACE_BUFFER_BASE_OFFSET 0x10000
-//#define DEBUG_TRACE_SIZE (0x80000)
-// Prevent T8015 AP overlap
 #define DEBUG_TRACE_SIZE (0x10000)
 
+#define SEPFW_MAPPING_SIZE (16 * MiB)
+#define SEP_DMA_MAPPING_SIZE (SEPFW_MAPPING_SIZE * 2)
+#define SEP_SHMBUF_BASE (SEPFW_MAPPING_SIZE + 0xC000)
+
+#define SEP_MMIO_INDEX_AKF_MBOX (0)
+#define SEP_MMIO_INDEX_PMGR (1)
+#define SEP_MMIO_INDEX_TRNG_REGS (2)
+#define SEP_MMIO_INDEX_KEY (3)
+#define SEP_MMIO_INDEX_KEY_FKEY (4)
+#define SEP_MMIO_INDEX_KEY_FCFG (5)
+#define SEP_MMIO_INDEX_MONI (6)
+#define SEP_MMIO_INDEX_MONI_THRM (7)
+#define SEP_MMIO_INDEX_EISP (8)
+#define SEP_MMIO_INDEX_EISP_HMAC (9)
+#define SEP_MMIO_INDEX_AESS (10)
+#define SEP_MMIO_INDEX_AESH (11)
+#define SEP_MMIO_INDEX_AESC (12)
+#define SEP_MMIO_INDEX_PKA (13)
+#define SEP_MMIO_INDEX_PKA_TMM (14)
+#define SEP_MMIO_INDEX_MISC2 (15)
+#define SEP_MMIO_INDEX_PROGRESS (16)
+#define SEP_MMIO_INDEX_BOOT_MONITOR (17)
+
 typedef struct {
+    AppleSEPState *sep;
     uint8_t key[32];
     uint8_t fifo[16];
     uint32_t offset_0x70;
@@ -76,37 +80,40 @@ typedef struct {
 } AppleTRNGState;
 
 typedef struct {
+    AppleSEPState *sep;
+    QEMUBH *command_bh;
+    QemuMutex lock;
     uint32_t chip_id;
-    uint32_t clock;              // 0x4
-    uint32_t ctl;                // 0x8
-    uint32_t state;              // 0xc
-    uint32_t reg_0x10;           // 0x10
+    uint32_t status; // 0x4
+    uint32_t command; // 0x8
+    uint32_t interrupt_status; // 0xc
+    uint32_t interrupt_enabled; // 0x10
     uint32_t reg_0x14_keywrap_iterations_counter; // 0x14
     uint32_t reg_0x18_keydisable; // 0x18
-    uint32_t seed_bits;          // 0x1c
-    uint32_t seed_bits_lock;     // 0x20
+    uint32_t seed_bits; // 0x1c
+    uint32_t seed_bits_lock; // 0x20
     union {
         struct {
-            uint8_t iv[16];      // 0x40 // IV for enc, IN for dec?
-            uint8_t in[16];      // 0x50 // IN for enc, IV for dec?
+            uint8_t iv[16]; // 0x40 // IV for enc, IN for dec?
+            uint8_t in[16]; // 0x50 // IN for enc, IV for dec?
         };
         struct {
-            uint8_t in_dec[16];  // 0x40 // IV for enc, IN for dec?
-            uint8_t iv_dec[16];  // 0x50 // IN for enc, IV for dec?
+            uint8_t in_dec[16]; // 0x40 // IV for enc, IN for dec?
+            uint8_t iv_dec[16]; // 0x50 // IN for enc, IV for dec?
         };
         uint8_t in_full[32]; // 0x40
     };
-    //uint8_t in_t8015[16];      // 0x100
-    //uint8_t iv_t8015[16];      // 0x110
+    // uint8_t in_t8015[16];      // 0x100
+    // uint8_t iv_t8015[16];      // 0x110
     union {
         struct {
-            uint8_t tag_out[16];     // 0x60
-            uint8_t out[16];         // 0x70
+            uint8_t tag_out[16]; // 0x60
+            uint8_t out[16]; // 0x70
         };
         uint8_t out_full[32]; // 0x60
     };
-    uint8_t key_256_in[32];  // 0x40 ; for custom key
-    uint8_t key_t8015_in[16];  // 0x100 ; for custom key
+    uint8_t key_256_in[32]; // 0x40 ; for custom key
+    uint8_t key_t8015_in[16]; // 0x100 ; for custom key
     uint8_t key_256_out[32]; // 0x60 ; for custom key
     uint8_t key_128_out[16]; // 0x60 ; for custom key
     //
@@ -114,17 +121,34 @@ typedef struct {
     uint8_t keywrap_key_uid1[32];
     uint8_t custom_key_index[4][32];
     bool custom_key_index_enabled[4];
-    // put keywrap_uid[01]_enabled here, or else ASAN will complain about misalignment.
+    // put keywrap_uid[01]_enabled here, or else ASAN will complain about
+    // misalignment.
     bool keywrap_uid0_enabled;
     bool keywrap_uid1_enabled;
- } AppleAESSState;
+} AppleAESSState;
 
 typedef struct {
+    AppleSEPState *sep;
+    QEMUBH *command_bh;
+    QemuMutex lock;
+    uint32_t command; // 0x0
     uint32_t status0; // 0x4
     uint32_t status_in0; // 0x8
-    uint32_t img4out_dgst_clock; // 0x40
-    uint32_t chip_revision_clock; // 0x800
-    uint32_t chipid_ecid_misc_clock; // 0x840
+    uint32_t img4out_dgst_locked; // 0x40
+    uint8_t img4out_dgst[32]; // 0x60
+    uint8_t output0[32]; // 0x60 ; read_cmd_0x2
+    uint8_t input0[0x80]; // 0x80 ; write_cmd_0x0 ; SMRK_pub ; 1024 bits ;
+                          // measurement==0x34_bytes
+    uint8_t public_key[32]; // 0x100 // for AESS ; read_cmd_0x0 ; read
+                            // public_key ; status_in0 needs to be 0x1
+    uint8_t attest_hash[32]; // 0x180 ; read_cmd_0x3 ; read attest_hash ;
+                             // status_in0 needs to be 0x1
+    uint8_t input1[0x20a]; // 0x200 .. 0x40a (not inclusive) ; write_cmd_0x1 ;
+                           // 4176 bits, maybe rsa input?
+    uint32_t chip_revision_locked; // 0x800
+    uint32_t chip_revision; // 0x820 ; mod_PKA_read buffer_id 0xd asks for that
+    uint32_t ecid_chipid_misc_locked; // 0x840
+    uint32_t ecid_chipid_misc[5]; // 0x860
 } ApplePKAState;
 
 #define KBKDF_CMAC_OUTPUT_LEN 0x48
@@ -140,7 +164,9 @@ typedef struct {
 #define KBKDF_KEY_RESPONSE_KEY_OFFSET 0x28
 #define KBKDF_KEY_SEED_LENGTH 8
 #define KBKDF_KEY_KEY_LENGTH 0x20
-#define KBKDF_KEY_MAX_SLOTS 0x49 // store mac_keys after that
+#define KBKDF_KEY_MAX_SLOTS 0x49
+#define KBKDF_KEY_KEY_FILE_OFFSET \
+    0x100 // 0x100*4*0x40 // store mac_keys after that
 
 #define KBKDF_CMAC_LENGTH_SIZE 2
 #define KBKDF_CMAC_LABEL_SIZE 0x10
@@ -155,8 +181,16 @@ typedef struct {
 
 #define BYTELEN_384 0x30
 
-#define SECP384_PUBLIC_SIZE 0x30
-#define SECP384_PUBLIC_XY_SIZE (SECP384_PUBLIC_SIZE * 2)
+#define SECP384_PUBLIC_XY_SIZE (BYTELEN_384 * 2)
+
+#define SSC_REQUEST_MAX_COPIES 4 // 0 .. 3
+
+#define SSC_RESPONSE_FLAG_COMMAND_SIZE_MISMATCH 0x02
+#define SSC_RESPONSE_FLAG_COMMAND_OR_FIELD_INVALID 0x04
+#define SSC_RESPONSE_FLAG_KEYSLOT_INVALID 0x08
+#define SSC_RESPONSE_FLAG_CMAC_INVALID 0x10
+#define SSC_RESPONSE_FLAG_CURVE_INVALID 0x20
+#define SSC_RESPONSE_FLAG_OK 0x80
 
 struct AppleSSCState {
     /*< private >*/
@@ -165,45 +199,41 @@ struct AppleSSCState {
 
     /*< public >*/
     uint32_t req_cur;
-    uint8_t req_cmd[1024];
     uint32_t resp_cur;
+    uint8_t req_cmd[1024];
     uint8_t resp_cmd[1024];
 
     AppleAESSState *aess_state;
     struct ecc_scalar ecc_key_main, ecc_keys[KBKDF_KEY_MAX_SLOTS];
-    ////struct ecc_point  ecc_pub0, ecc_pub1, cmd0_ecpub;
+    struct knuth_lfib_ctx rctx;
     uint8_t random_hmac_key[SHA256_DIGEST_SIZE];
     uint8_t slot_hmac_key[KBKDF_KEY_MAX_SLOTS][SHA256_DIGEST_SIZE];
     uint8_t kbkdf_keys[KBKDF_KEY_MAX_SLOTS][KBKDF_CMAC_OUTPUT_LEN];
     uint32_t kbkdf_counter[KBKDF_KEY_MAX_SLOTS];
     uint8_t cpsn[0x07];
-    ////bool cmd_0x7_called;
 };
 
-int aes_ccm_crypt(struct AppleSSCState *ssc_state, uint8_t kbkdf_index, uint8_t *prefix, int payload_len, uint8_t *data, uint8_t *out, int encrypt, int response_key);
-int aes_cmac_prefix_public(uint8_t *key, uint8_t *prefix, uint8_t *public0, uint8_t *digest);
-int aes_cmac_prefix_public_public(uint8_t *key, uint8_t *prefix, uint8_t *public0, uint8_t *public1, uint8_t *digest);
-int kbkdf_generate_key(uint8_t *cmac_key, uint8_t *label, uint8_t *context, uint8_t *derived, int length);
-void hexout(const char *desc, const uint8_t *in, int in_len);
-int generate_ec_priv(const char *priv, struct ecc_scalar *ecc_key, struct ecc_point *ecc_pub);
-int output_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy);
-int input_ec_pub(struct ecc_point *ecc_pub, uint8_t *pub_xy);
-int generate_kbkdf_keys(struct AppleSSCState *ssc_state, struct ecc_scalar *ecc_key, struct ecc_point *ecc_pub_peer, uint8_t *hmac_key, uint8_t *label, uint8_t *context, uint8_t kbkdf_index);
-void hkdf_sha256(int salt_len, uint8_t *salt, int info_len, uint8_t *info, int key_len, uint8_t *key, uint8_t *out);
-void aes_keys_from_sp_key(struct AppleSSCState *ssc_state, uint8_t kbkdf_index, uint8_t *prefix, uint8_t *aes_key_mackey, uint8_t *aes_key_extractorkey);
-void do_response_prefix(uint8_t *request, uint8_t *response, uint8_t flags);
-int answer_cmd_0x0_init1(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x1_connect_sp(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x2_disconnect_sp(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x3_metadata_write(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x4_metadata_data_read(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x5_metadata_data_write(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x6_metadata_read(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x7_init0(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x8_save(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-int answer_cmd_0x9_panic(struct AppleSSCState *ssc_state, uint8_t *request, uint8_t *response);
-
-#define REG_SIZE (0x10000)
+#define PMGR_BASE_REG_SIZE (0x10000) // T8015/T8030
+#define TRNG_REGS_REG_SIZE (0x10000) // T8015/T8030
+#define KEY_BASE_REG_SIZE (0x10000) // T8015/T8030
+#define KEY_FKEY_REG_SIZE_S8000 (0x1000) // S8000
+#define KEY_FKEY_REG_SIZE_T8015 (0x4000) // T8015
+#define KEY_FCFG_REG_SIZE_S8000 (0x4000) // S8000
+#define KEY_FCFG_REG_SIZE_T8015 (0x10000) // T8015
+#define KEY_FCFG_REG_SIZE_T8020 (0x18000) // T8020
+#define KEY_FCFG_REG_SIZE_T8030 (0x14000) // T8030
+#define MONI_BASE_REG_SIZE (0x40000)
+#define MONI_THRM_REG_SIZE (0x10000)
+#define EISP_BASE_REG_SIZE (0x240000)
+#define EISP_HMAC_REG_SIZE (0x4000)
+#define AESC_BASE_REG_SIZE (0x4000) // S8000
+#define AESS_BASE_REG_SIZE (0x10000) // T8015/T8030
+#define AESH_BASE_REG_SIZE (0x10000)
+#define PKA_BASE_REG_SIZE (0x10000) // T8015/T8030
+#define PKA_TMM_REG_SIZE (0x4000)
+#define MISC2_REG_SIZE (0x4000) // ?
+#define PROGRESS_REG_SIZE (0x4000) // ?
+#define BOOT_MONITOR_REG_SIZE (0x4000) // ?
 
 struct AppleSEPClass {
     /*< private >*/
@@ -211,7 +241,7 @@ struct AppleSEPClass {
 
     /*< public >*/
     DeviceRealize parent_realize;
-    DeviceReset parent_reset;
+    ResettablePhases parent_phases;
 };
 
 struct AppleSEPState {
@@ -234,56 +264,56 @@ struct AppleSEPState {
     MemoryRegion eisp_base_mr;
     MemoryRegion eisp_hmac_mr;
     MemoryRegion aess_base_mr;
+    MemoryRegion aesh_base_mr;
+    MemoryRegion aesc_base_mr;
     MemoryRegion pka_base_mr;
-    MemoryRegion misc0_mr;
+    MemoryRegion pka_tmm_mr;
     MemoryRegion misc2_mr;
-    MemoryRegion misc4_mr;
+    MemoryRegion progress_mr;
+    MemoryRegion boot_monitor_mr;
     MemoryRegion debug_trace_mr;
-    uint8_t pmgr_base_regs[REG_SIZE];
-    uint8_t key_base_regs[REG_SIZE];
-    uint8_t key_fkey_regs[REG_SIZE];
-    uint8_t key_fcfg_regs[REG_SIZE];
-    uint8_t moni_base_regs[REG_SIZE];
-    uint8_t moni_thrm_regs[REG_SIZE];
-    uint8_t eisp_base_regs[REG_SIZE];
-    uint8_t eisp_hmac_regs[REG_SIZE];
-    uint8_t aess_base_regs[REG_SIZE];
-    uint8_t pka_base_regs[REG_SIZE];
-    uint8_t misc0_regs[REG_SIZE];
-    uint8_t misc2_regs[REG_SIZE];
-    uint8_t misc4_regs[REG_SIZE];
+    uint8_t pmgr_base_regs[PMGR_BASE_REG_SIZE];
+    uint8_t key_base_regs[KEY_BASE_REG_SIZE];
+    // picking the largest sizes, just to be sure
+    uint8_t key_fkey_regs[KEY_FKEY_REG_SIZE_T8015];
+    uint8_t key_fcfg_regs[KEY_FCFG_REG_SIZE_T8020];
+    uint8_t moni_base_regs[MONI_BASE_REG_SIZE];
+    uint8_t moni_thrm_regs[MONI_THRM_REG_SIZE];
+    uint8_t eisp_base_regs[EISP_BASE_REG_SIZE];
+    uint8_t eisp_hmac_regs[EISP_HMAC_REG_SIZE];
+    uint8_t aess_base_regs[AESS_BASE_REG_SIZE];
+    uint8_t aesh_base_regs[AESH_BASE_REG_SIZE];
+    uint8_t aesc_base_regs[AESC_BASE_REG_SIZE];
+    uint8_t pka_base_regs[PKA_BASE_REG_SIZE];
+    uint8_t pka_tmm_regs[PKA_TMM_REG_SIZE];
+    uint8_t misc2_regs[MISC2_REG_SIZE];
+    uint8_t progress_regs[PROGRESS_REG_SIZE];
+    uint8_t boot_monitor_regs[PROGRESS_REG_SIZE];
     uint8_t debug_trace_regs[DEBUG_TRACE_SIZE]; // 0x10000
     QEMUTimer *timer;
     AppleTRNGState trng_state;
     AppleAESSState aess_state;
     ApplePKAState pka_state;
-    DeviceState *fiq_or;
-    DeviceState *irq_or;
-    EEPROMState *eeprom0;
+    I2CSlave *nvram;
     AppleSSCState *ssc_state;
     hwaddr sep_fw_addr;
-    uint64_t sep_fw_size;
+    gsize sep_fw_size;
     uint32_t chip_id;
     hwaddr shmbuf_base;
     hwaddr trace_buffer_base_offset;
     hwaddr debug_trace_size;
-    gchar *sepfw_data;
-    //uint8_t *sepfw_data;
-    MemoryRegion *sepfw_mr;
-    int debug_trace_mmio_index;
+    gchar *fw_data;
+    bool pmgr_fuse_changer_bit0_was_set;
+    bool pmgr_fuse_changer_bit1_was_set;
+    uint8_t key_fcfg_offset_0x14_index;
+    uint16_t key_fcfg_offset_0x14_values[5];
 };
 
-#if 1
-AppleSEPState *apple_sep_create(DTBNode *node, MemoryRegion *ool_mr, vaddr base,
-                                uint32_t cpu_id, uint32_t build_version,
-                                bool modern, uint32_t chip_id);
-#else
-AppleSEPState *apple_sep_create(DTBNode *node, vaddr base, uint32_t cpu_id,
-                                uint32_t build_version, bool modern, uint32_t chip_id);
-#endif
+AppleSEPState *apple_sep_from_node(AppleDTNode *node, MemoryRegion *ool_mr,
+                                   vaddr base, uint32_t cpu_id,
+                                   uint32_t build_version, bool modern,
+                                   uint32_t chip_id);
 
 AppleSSCState *apple_ssc_create(MachineState *machine, uint8_t addr);
-
-void enable_trace_buffer(AppleSEPState *s);
 
 #endif /* HW_ARM_APPLE_SILICON_SEP_H */

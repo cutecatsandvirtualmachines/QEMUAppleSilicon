@@ -1,5 +1,9 @@
 #ifndef WKDM_INTERNAL_H
 #define WKDM_INTERNAL_H
+
+#include "qemu/osdep.h"
+#include "exec/target_page.h"
+
 /* direct-mapped partial matching compressor with simple 22/10 split
  *
  *  Compresses buffers using a dictionary based match and partial match

@@ -1,14 +1,12 @@
 #ifndef APPLE_AIC_H
 #define APPLE_AIC_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_AIC "apple.aic"
+#define TYPE_APPLE_AIC "apple-aic"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleAICState, APPLE_AIC)
-
-#define AIC_DEBUG_NEW_IRQ
 
 typedef struct AppleAICState AppleAICState;
 
@@ -37,13 +35,10 @@ struct AppleAICState {
     uint32_t *eir_dest;
     AppleAICCPU *cpus;
     uint32_t *eir_state;
-#ifdef AIC_DEBUG_NEW_IRQ
-    uint32_t *eir_mask_once;
-#endif
 };
 
 
-SysBusDevice *apple_aic_create(uint32_t numCPU, DTBNode *node,
-                               DTBNode *timebase_node);
+SysBusDevice *apple_aic_create(uint32_t numCPU, AppleDTNode *node,
+                               AppleDTNode *timebase_node);
 
 #endif /* APPLE_AIC_H */

@@ -29,8 +29,8 @@
 #include "qemu/option.h"
 #include "block/block-io.h"
 #include "block/block_int.h"
-#include "qapi/qmp/qdict.h"
-#include "qapi/qmp/qstring.h"
+#include "qobject/qdict.h"
+#include "qobject/qstring.h"
 #include "crypto/secret.h"
 #include <curl/curl.h>
 #include "qemu/cutils.h"
@@ -162,12 +162,8 @@ static int curl_timer_cb(CURLM *multi, long timeout_ms, void *opaque)
 static int curl_sock_cb(CURL *curl, curl_socket_t fd, int action,
                         void *userp, void *sp)
 {
-    BDRVCURLState *s;
-    CURLState *state = NULL;
+    BDRVCURLState *s = userp;
     CURLSocket *socket;
-
-    curl_easy_getinfo(curl, CURLINFO_PRIVATE, (char **)&state);
-    s = state->s;
 
     socket = g_hash_table_lookup(s->sockets, GINT_TO_POINTER(fd));
     if (!socket) {
@@ -210,35 +206,27 @@ static size_t curl_header_cb(void *ptr, size_t size, size_t nmemb, void *opaque)
 {
     BDRVCURLState *s = opaque;
     size_t realsize = size * nmemb;
-    const char *header = (char *)ptr;
-    const char *end = header + realsize;
-    const char *accept_ranges = "accept-ranges:";
-    const char *bytes = "bytes";
+    const char *p = ptr;
+    const char *end = p + realsize;
+    const char *t = "accept-ranges : bytes "; /* A lowercase template */
 
-    if (realsize >= strlen(accept_ranges)
-        && g_ascii_strncasecmp(header, accept_ranges,
-                               strlen(accept_ranges)) == 0) {
-
-        char *p = strchr(header, ':') + 1;
-
-        /* Skip whitespace between the header name and value. */
-        while (p < end && *p && g_ascii_isspace(*p)) {
-            p++;
-        }
-
-        if (end - p >= strlen(bytes)
-            && strncmp(p, bytes, strlen(bytes)) == 0) {
-
-            /* Check that there is nothing but whitespace after the value. */
-            p += strlen(bytes);
-            while (p < end && *p && g_ascii_isspace(*p)) {
-                p++;
+    /* check if header matches the "t" template */
+    for (;;) {
+        if (*t == ' ') { /* space in t matches any amount of isspace in p */
+            if (p < end && g_ascii_isspace(*p)) {
+                ++p;
+            } else {
+                ++t;
             }
-
-            if (p == end || !*p) {
-                s->accept_range = true;
-            }
+        } else if (*t && p < end && *t == g_ascii_tolower(*p)) {
+            ++p, ++t;
+        } else {
+            break;
         }
+    }
+
+    if (!*t && p == end) { /* if we managed to reach ends of both strings */
+        s->accept_range = true;
     }
 
     return realsize;
@@ -483,11 +471,11 @@ static int curl_init_state(BDRVCURLState *s, CURLState *state)
                              (void *)curl_read_cb) ||
             curl_easy_setopt(state->curl, CURLOPT_WRITEDATA, (void *)state) ||
             curl_easy_setopt(state->curl, CURLOPT_PRIVATE, (void *)state) ||
-            curl_easy_setopt(state->curl, CURLOPT_AUTOREFERER, 1) ||
-            curl_easy_setopt(state->curl, CURLOPT_FOLLOWLOCATION, 1) ||
-            curl_easy_setopt(state->curl, CURLOPT_NOSIGNAL, 1) ||
+            curl_easy_setopt(state->curl, CURLOPT_AUTOREFERER, 1L) ||
+            curl_easy_setopt(state->curl, CURLOPT_FOLLOWLOCATION, 1L) ||
+            curl_easy_setopt(state->curl, CURLOPT_NOSIGNAL, 1L) ||
             curl_easy_setopt(state->curl, CURLOPT_ERRORBUFFER, state->errmsg) ||
-            curl_easy_setopt(state->curl, CURLOPT_FAILONERROR, 1)) {
+            curl_easy_setopt(state->curl, CURLOPT_FAILONERROR, 1L)) {
             goto err;
         }
         if (s->username) {
@@ -613,6 +601,7 @@ static void curl_attach_aio_context(BlockDriverState *bs,
     assert(!s->multi);
     s->multi = curl_multi_init();
     s->aio_context = new_context;
+    curl_multi_setopt(s->multi, CURLMOPT_SOCKETDATA, s);
     curl_multi_setopt(s->multi, CURLMOPT_SOCKETFUNCTION, curl_sock_cb);
     curl_multi_setopt(s->multi, CURLMOPT_TIMERDATA, s);
     curl_multi_setopt(s->multi, CURLMOPT_TIMERFUNCTION, curl_timer_cb);
@@ -811,7 +800,7 @@ static int curl_open(BlockDriverState *bs, QDict *options, int flags,
     }
 
     s->accept_range = false;
-    if (curl_easy_setopt(state->curl, CURLOPT_NOBODY, 1) ||
+    if (curl_easy_setopt(state->curl, CURLOPT_NOBODY, 1L) ||
         curl_easy_setopt(state->curl, CURLOPT_HEADERFUNCTION, curl_header_cb) ||
         curl_easy_setopt(state->curl, CURLOPT_HEADERDATA, s)) {
         pstrcpy(state->errmsg, CURL_ERROR_SIZE,
@@ -1034,7 +1023,7 @@ static BlockDriver bdrv_http = {
 
     .instance_size              = sizeof(BDRVCURLState),
     .bdrv_parse_filename        = curl_parse_filename,
-    .bdrv_file_open             = curl_open,
+    .bdrv_open                  = curl_open,
     .bdrv_close                 = curl_close,
     .bdrv_co_getlength          = curl_co_getlength,
 
@@ -1053,7 +1042,7 @@ static BlockDriver bdrv_https = {
 
     .instance_size              = sizeof(BDRVCURLState),
     .bdrv_parse_filename        = curl_parse_filename,
-    .bdrv_file_open             = curl_open,
+    .bdrv_open                  = curl_open,
     .bdrv_close                 = curl_close,
     .bdrv_co_getlength          = curl_co_getlength,
 
@@ -1072,7 +1061,7 @@ static BlockDriver bdrv_ftp = {
 
     .instance_size              = sizeof(BDRVCURLState),
     .bdrv_parse_filename        = curl_parse_filename,
-    .bdrv_file_open             = curl_open,
+    .bdrv_open                  = curl_open,
     .bdrv_close                 = curl_close,
     .bdrv_co_getlength          = curl_co_getlength,
 
@@ -1091,7 +1080,7 @@ static BlockDriver bdrv_ftps = {
 
     .instance_size              = sizeof(BDRVCURLState),
     .bdrv_parse_filename        = curl_parse_filename,
-    .bdrv_file_open             = curl_open,
+    .bdrv_open                  = curl_open,
     .bdrv_close                 = curl_close,
     .bdrv_co_getlength          = curl_co_getlength,
 

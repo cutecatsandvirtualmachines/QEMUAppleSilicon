@@ -1,9 +1,17 @@
 mappings:
+  # Too old on Ubuntu 22.04; we install it from cargo instead
+  bindgen:
+    Ubuntu2204:
+
   flake8:
     OpenSUSELeap15:
 
   meson:
     OpenSUSELeap15:
+    # Use Meson from PyPI wherever Rust is enabled
+    Debian:
+    Fedora:
+    Ubuntu:
 
   python3:
     OpenSUSELeap15: python311-base
@@ -60,10 +68,15 @@ mappings:
   python3-wheel:
     OpenSUSELeap15: python311-pip
 
+  rust:
+    Debian12: rustc-web
+    Ubuntu2204: rustc-1.77
+    Ubuntu2404: rustc-1.77
+
 pypi_mappings:
   # Request more recent version
   meson:
-    default: meson==0.63.2
+    default: meson==1.8.1
 
   # Drop packages that need devel headers
   python3-numpy:

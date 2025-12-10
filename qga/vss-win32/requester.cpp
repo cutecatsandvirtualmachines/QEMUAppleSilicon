@@ -28,8 +28,9 @@
 
 #define err_set(e, err, fmt, ...) {                                         \
     (e)->error_setg_win32_wrapper((e)->errp, __FILE__, __LINE__, __func__,  \
-                                   err, fmt, ## __VA_ARGS__);               \
-    qga_debug(fmt, ## __VA_ARGS__);                                         \
+                                   err, fmt ": Windows error 0x%lx",        \
+                                   ## __VA_ARGS__, err);                    \
+    qga_debug(fmt ": Windows error 0x%lx", ## __VA_ARGS__, err);            \
 }
 /* Bad idea, works only when (e)->errp != NULL: */
 #define err_is_set(e) ((e)->errp && *(e)->errp)
@@ -254,8 +255,8 @@ out:
     qga_debug_end;
 }
 
-DWORD get_reg_dword_value(HKEY baseKey, LPCSTR subKey, LPCSTR valueName,
-                          DWORD defaultData)
+static DWORD get_reg_dword_value(HKEY baseKey, LPCSTR subKey, LPCSTR valueName,
+                                 DWORD defaultData)
 {
     qga_debug_begin;
 
@@ -272,12 +273,12 @@ DWORD get_reg_dword_value(HKEY baseKey, LPCSTR subKey, LPCSTR valueName,
     return dwordData;
 }
 
-bool is_valid_vss_backup_type(VSS_BACKUP_TYPE vssBT)
+static bool is_valid_vss_backup_type(VSS_BACKUP_TYPE vssBT)
 {
     return (vssBT > VSS_BT_UNDEFINED && vssBT < VSS_BT_OTHER);
 }
 
-VSS_BACKUP_TYPE get_vss_backup_type(
+static VSS_BACKUP_TYPE get_vss_backup_type(
     VSS_BACKUP_TYPE defaultVssBT = DEFAULT_VSS_BACKUP_TYPE)
 {
     qga_debug_begin;

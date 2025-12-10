@@ -1,11 +1,33 @@
+/*
+ * Apple A7IOP Core.
+ *
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef HW_MISC_APPLE_SILICON_A7IOP_CORE_H
 #define HW_MISC_APPLE_SILICON_A7IOP_CORE_H
 
 #include "qemu/osdep.h"
 #include "hw/misc/apple-silicon/a7iop/base.h"
 #include "hw/misc/apple-silicon/a7iop/mailbox/core.h"
-#include "hw/qdev-core.h"
 #include "hw/sysbus.h"
+#include "migration/vmstate.h"
+
+#define CPU_CTRL_RUN BIT(4)
+#define SEP_BOOT_MONITOR_RUN BIT(16)
 
 #define TYPE_APPLE_A7IOP "apple-a7iop"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleA7IOP, APPLE_A7IOP)
@@ -20,13 +42,10 @@ struct AppleA7IOP {
     SysBusDevice parent_obj;
 
     /*< public >*/
-    AppleA7IOPVersion version;
     const char *role;
     MemoryRegion mmio;
     const AppleA7IOPOps *ops;
     QemuMutex lock;
-    //qemu_irq iop_irq;
-    //QTAILQ_HEAD(, AppleA7IOPInterruptStatusMessage) interrupt_status;
     AppleA7IOPMailbox *ap_mailbox;
     AppleA7IOPMailbox *iop_mailbox;
     uint32_t cpu_status;
@@ -42,9 +61,13 @@ uint32_t apple_a7iop_get_cpu_status(AppleA7IOP *s);
 void apple_a7iop_set_cpu_status(AppleA7IOP *s, uint32_t value);
 uint32_t apple_a7iop_get_cpu_ctrl(AppleA7IOP *s);
 void apple_a7iop_set_cpu_ctrl(AppleA7IOP *s, uint32_t value);
-//void apple_a7iop_interrupt_status_push(AppleA7IOP *s, uint32_t status);
 void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
                       AppleA7IOPVersion version, const AppleA7IOPOps *ops,
-                      QEMUBH *iop_bh);
+                      QEMUBHFunc *handle_messages_func);
+
+extern const VMStateDescription vmstate_apple_a7iop;
+
+#define VMSTATE_APPLE_A7IOP(_field, _state) \
+    VMSTATE_STRUCT(_field, _state, 0, vmstate_apple_a7iop, AppleA7IOP)
 
 #endif /* HW_MISC_APPLE_SILICON_A7IOP_CORE_H */

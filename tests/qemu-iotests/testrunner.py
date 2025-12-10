@@ -27,9 +27,7 @@ import json
 import shutil
 import sys
 from multiprocessing import Pool
-from typing import List, Optional, Any, Sequence, Dict, \
-        ContextManager
-
+from typing import List, Optional, Any, Sequence, Dict
 from testenv import TestEnv
 
 
@@ -54,7 +52,7 @@ def file_diff(file1: str, file2: str) -> List[str]:
         return res
 
 
-class LastElapsedTime(ContextManager['LastElapsedTime']):
+class LastElapsedTime(contextlib.AbstractContextManager['LastElapsedTime']):
     """ Cache for elapsed time for tests, to show it during new test run
 
     It is safe to use get() at any time.  To use update(), you must either
@@ -109,7 +107,7 @@ class TestResult:
         self.interrupted = interrupted
 
 
-class TestRunner(ContextManager['TestRunner']):
+class TestRunner(contextlib.AbstractContextManager['TestRunner']):
     shared_self = None
 
     @staticmethod

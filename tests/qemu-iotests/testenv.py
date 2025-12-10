@@ -22,10 +22,12 @@ import tempfile
 from pathlib import Path
 import shutil
 import collections
+import contextlib
 import random
 import subprocess
 import glob
-from typing import List, Dict, Any, Optional, ContextManager
+from typing import List, Dict, Any, Optional
+
 
 DEF_GDB_OPTIONS = 'localhost:12345'
 
@@ -53,7 +55,7 @@ def get_default_machine(qemu_prog: str) -> str:
     return default_machine
 
 
-class TestEnv(ContextManager['TestEnv']):
+class TestEnv(contextlib.AbstractContextManager['TestEnv']):
     """
     Manage system environment for running tests
 
@@ -235,9 +237,12 @@ class TestEnv(ContextManager['TestEnv']):
             ('aarch64', 'virt'),
             ('avr', 'mega2560'),
             ('m68k', 'virt'),
+            ('or1k', 'virt'),
             ('riscv32', 'virt'),
             ('riscv64', 'virt'),
             ('rx', 'gdbsim-r5f562n8'),
+            ('sh4', 'r2d'),
+            ('sh4eb', 'r2d'),
             ('tricore', 'tricore_testboard')
         )
         for suffix, machine in machine_map:
@@ -250,7 +255,7 @@ class TestEnv(ContextManager['TestEnv']):
         self.qemu_img_options = os.getenv('QEMU_IMG_OPTIONS')
         self.qemu_nbd_options = os.getenv('QEMU_NBD_OPTIONS')
 
-        is_generic = self.imgfmt not in ['bochs', 'cloop', 'dmg']
+        is_generic = self.imgfmt not in ['bochs', 'cloop', 'dmg', 'vvfat']
         self.imgfmt_generic = 'true' if is_generic else 'false'
 
         self.qemu_io_options = f'--cache {self.cachemode} --aio {self.aiomode}'

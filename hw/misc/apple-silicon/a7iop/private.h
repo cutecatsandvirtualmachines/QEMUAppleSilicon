@@ -1,3 +1,22 @@
+/*
+ * Apple A7IOP Private.
+ *
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef HW_MISC_APPLE_SILICON_A7IOP_PRIVATE_H
 #define HW_MISC_APPLE_SILICON_A7IOP_PRIVATE_H
 
@@ -9,5 +28,7 @@
 
 void apple_a7iop_init_mmio_v2(AppleA7IOP *s, uint64_t mmio_size);
 void apple_a7iop_init_mmio_v4(AppleA7IOP *s, uint64_t mmio_size);
+
+uint32_t apple_a7iop_interrupt_status_pop(AppleA7IOPMailbox *s);
 
 #endif /* HW_MISC_APPLE_SILICON_A7IOP_PRIVATE_H */

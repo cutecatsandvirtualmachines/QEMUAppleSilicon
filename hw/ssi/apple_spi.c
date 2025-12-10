@@ -1,10 +1,12 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/dma/apple_sio.h"
 #include "hw/irq.h"
 #include "hw/ssi/apple_spi.h"
 #include "hw/ssi/ssi.h"
 #include "migration/vmstate.h"
+#include "qapi/error.h"
+#include "qemu/error-report.h"
 #include "qemu/fifo32.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
@@ -201,7 +203,7 @@ static void apple_spi_update_cs(AppleSPIState *s)
 
 static void apple_spi_cs_set(void *opaque, int pin, int level)
 {
-    AppleSPIState *s = APPLE_SPI(opaque);
+    AppleSPIState *s = opaque;
     if (level) {
         REG(s, REG_PIN) |= REG_PIN_CS;
     } else {
@@ -294,7 +296,7 @@ static void apple_spi_run(AppleSPIState *s)
 static void apple_spi_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                 unsigned size)
 {
-    AppleSPIState *s = APPLE_SPI(opaque);
+    AppleSPIState *s = opaque;
     uint32_t r = data;
     uint32_t *mmio = &REG(s, addr);
     uint32_t old = *mmio;
@@ -362,7 +364,7 @@ static void apple_spi_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t apple_spi_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleSPIState *s = APPLE_SPI(opaque);
+    AppleSPIState *s = opaque;
     uint32_t r;
     bool run = false;
 
@@ -423,6 +425,11 @@ static void apple_spi_reset(DeviceState *dev)
     fifo32_reset(&s->rx_fifo);
 }
 
+SSIBus *apple_spi_get_bus(AppleSPIState *s)
+{
+    return s->spi;
+}
+
 static void apple_spi_realize(DeviceState *dev, struct Error **errp)
 {
     AppleSPIState *s = APPLE_SPI(dev);
@@ -450,7 +457,12 @@ static void apple_spi_realize(DeviceState *dev, struct Error **errp)
     obj = object_property_get_link(OBJECT(dev), "sio", NULL);
     sio = APPLE_SIO(obj);
 
-    if (!sio) {
+    if (sio == NULL) {
+        if (s->dma_capable) {
+            warn_report("%s: SPI bus is DMA capable, but no SIO is attached. "
+                        "This is a bug.",
+                        __func__);
+        }
         s->dma_capable = false;
     } else if (s->dma_capable) {
         s->tx_chan = apple_sio_get_endpoint(sio, s->tx_chan_id);
@@ -458,20 +470,19 @@ static void apple_spi_realize(DeviceState *dev, struct Error **errp)
     }
 }
 
-SysBusDevice *apple_spi_create(DTBNode *node)
+SysBusDevice *apple_spi_from_node(AppleDTNode *node)
 {
     DeviceState *dev = qdev_new(TYPE_APPLE_SPI);
     SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
     AppleSPIState *s = APPLE_SPI(dev);
-    DTBProp *prop = find_dtb_prop(node, "reg");
-    uint64_t mmio_size = ((hwaddr *)prop->value)[1];
+    AppleDTProp *prop = apple_dt_get_prop(node, "reg");
+    uint64_t mmio_size = ((hwaddr *)prop->data)[1];
 
-    prop = find_dtb_prop(node, "name");
-    dev->id = g_strdup((const char *)prop->value);
+    dev->id = apple_dt_get_prop_strdup(node, "name", &error_fatal);
     s->mmio_size = mmio_size;
 
-    if ((prop = find_dtb_prop(node, "dma-channels")) != NULL) {
-        uint32_t *data = (uint32_t *)prop->value;
+    if ((prop = apple_dt_get_prop(node, "dma-channels")) != NULL) {
+        uint32_t *data = (uint32_t *)prop->data;
         s->dma_capable = true;
         s->tx_chan_id = data[0];
         s->rx_chan_id = data[8];
@@ -490,7 +501,7 @@ static const VMStateDescription vmstate_apple_spi = {
     .version_id = 1,
     .minimum_version_id = 1,
     .fields =
-        (VMStateField[]){
+        (const VMStateField[]){
             VMSTATE_UINT32_ARRAY(regs, AppleSPIState, APPLE_SPI_MMIO_SIZE >> 2),
             VMSTATE_FIFO32(rx_fifo, AppleSPIState),
             VMSTATE_FIFO32(tx_fifo, AppleSPIState),
@@ -500,13 +511,13 @@ static const VMStateDescription vmstate_apple_spi = {
         }
 };
 
-static void apple_spi_class_init(ObjectClass *klass, void *data)
+static void apple_spi_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
     dc->desc = "Apple Samsung SPI Controller";
 
-    dc->reset = apple_spi_reset;
+    device_class_set_legacy_reset(dc, apple_spi_reset);
     dc->realize = apple_spi_realize;
     dc->vmsd = &vmstate_apple_spi;
 }

@@ -1,0 +1,56 @@
+name: Bug Report
+description: Report an issue with QEMUAppleSilicon
+type: "Bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # This form is not for asking questions, requesting time estimates, asking for help or similar. The Discussions tab or the Telegram supergroup are better suited for those.
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: On which OS is the bug occurring? You must include the version too.
+    validations:
+      required: true
+  - type: input
+    id: cpu
+    attributes:
+      label: What is your CPU's model?
+      placeholder: ex. Apple M4
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the unexpected behaviour in detail.
+      placeholder: I clicked on X, then Y, and Z happened.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behaviour
+    attributes:
+      label: What should've happened instead?
+      placeholder: X should be doing Y.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Attach any logs related to this issue.
+      description: |
+        If the emulator crashed (e.g. a "segmentation fault"), please make sure to attach a backtrace via gdb/lldb or crash report (blah.ips from Console on macOS for example).
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Issue Report Terms
+      description: By submitting this bug, you agree to the following terms
+      options:
+        - label: You have made sure that there are no other reports about this bug.
+          required: true
+        - label: You do not use any software that might interfere with correct function of this software. For Hackintosh users, that could be OCLP, WEG, etc.
+          required: true
+        - label: You are on the latest commit of the emulator.
+          required: true
+        - label: You acknowledge that violation of these terms may result in your issue being closed or you getting blocked from the organisation.
+          required: true

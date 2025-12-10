@@ -152,7 +152,7 @@
 
 /* Global Configuration Register */
 #define GCTL_PWRDNSCALE(n) ((n) << 19)
-#define GCTL_U2RSTECN      (1 << 16)
+#define GCTL_U2RSTECN      BIT(16)
 #define GCTL_RAMCLKSEL(x)  (((x)&GCTL_CLK_MASK) << 6)
 #define GCTL_CLK_BUS       (0)
 #define GCTL_CLK_PIPE      (1)
@@ -165,21 +165,21 @@
 #define GCTL_PRTCAP_DEVICE 2
 #define GCTL_PRTCAP_OTG    3
 
-#define GCTL_CORESOFTRESET    (1 << 11)
+#define GCTL_CORESOFTRESET    BIT(11)
 #define GCTL_SCALEDOWN(n)     ((n) << 4)
 #define GCTL_SCALEDOWN_MASK   GCTL_SCALEDOWN(3)
-#define GCTL_DISSCRAMBLE      (1 << 3)
-#define GCTL_GBLHIBERNATIONEN (1 << 1)
-#define GCTL_DSBLCLKGTNG      (1 << 0)
+#define GCTL_DISSCRAMBLE      BIT(3)
+#define GCTL_GBLHIBERNATIONEN BIT(1)
+#define GCTL_DSBLCLKGTNG      BIT(0)
 
 /* Global Status Register */
-#define GSTS_OTG_IP           (1 << 10)
-#define GSTS_BC_IP            (1 << 9)
-#define GSTS_ADP_IP           (1 << 8)
-#define GSTS_HOST_IP          (1 << 7)
-#define GSTS_DEVICE_IP        (1 << 6)
-#define GSTS_CSR_TIMEOUT      (1 << 5)
-#define GSTS_BUS_ERR_ADDR_VLD (1 << 4)
+#define GSTS_OTG_IP           BIT(10)
+#define GSTS_BC_IP            BIT(9)
+#define GSTS_ADP_IP           BIT(8)
+#define GSTS_HOST_IP          BIT(7)
+#define GSTS_DEVICE_IP        BIT(6)
+#define GSTS_CSR_TIMEOUT      BIT(5)
+#define GSTS_BUS_ERR_ADDR_VLD BIT(4)
 #define GSTS_CURMOD_MASK(n)   (0x3)
 #define GSTS_CURMOD(n)        ((n) & GSTS_CURMOD_MASK)
 #define GSTS_CURMOD_DEVICE    0
@@ -208,12 +208,45 @@
 #define GSNPSID_REVISION_250A 0x5533250a
 
 /* Global USB2 PHY Configuration Register */
-#define GUSB2PHYCFG_PHYSOFTRST (1 << 31)
-#define GUSB2PHYCFG_SUSPHY     (1 << 6)
+#define GUSB2PHYCFG_PHYSOFTRST BIT(31)
+#define GUSB2PHYCFG_U2_FREECLK_EXISTS	BIT(30)
+#define GUSB2PHYCFG_ULPIEXTVBUSDRV	BIT(17)
+#define GUSB2PHYCFG_SUSPHY     BIT(6)
+#define GUSB2PHYCFG_ULPI_UTMI	BIT(4)
+#define GUSB2PHYCFG_ENBLSLPM	BIT(8)
+#define GUSB2PHYCFG_PHYIF(n)	(n << 3)
+#define GUSB2PHYCFG_PHYIF_MASK	GUSB2PHYCFG_PHYIF(1)
+#define GUSB2PHYCFG_USBTRDTIM(n)	(n << 10)
+#define GUSB2PHYCFG_USBTRDTIM_MASK	GUSB2PHYCFG_USBTRDTIM(0xf)
+#define USBTRDTIM_UTMI_8_BIT		9
+#define USBTRDTIM_UTMI_16_BIT		5
+#define UTMI_PHYIF_16_BIT		1
+#define UTMI_PHYIF_8_BIT		0
+
+/* Global USB2 PHY Vendor Control Register */
+#define GUSB2PHYACC_NEWREGREQ	BIT(25)
+#define GUSB2PHYACC_DONE		BIT(24)
+#define GUSB2PHYACC_BUSY		BIT(23)
+#define GUSB2PHYACC_WRITE		BIT(22)
+#define GUSB2PHYACC_ADDR(n)	(n << 16)
+#define GUSB2PHYACC_EXTEND_ADDR(n)	(n << 8)
+#define GUSB2PHYACC_DATA(n)	(n & 0xff)
 
 /* Global USB3 PIPE Control Register */
-#define GUSB3PIPECTL_PHYSOFTRST (1 << 31)
-#define GUSB3PIPECTL_SUSPHY     (1 << 17)
+#define GUSB3PIPECTL_PHYSOFTRST BIT(31)
+#define GUSB3PIPECTL_U2SSINP3OK	BIT(29)
+#define GUSB3PIPECTL_DISRXDETINP3	BIT(28)
+#define GUSB3PIPECTL_UX_EXIT_PX	BIT(27)
+#define GUSB3PIPECTL_REQP1P2P3	BIT(24)
+#define GUSB3PIPECTL_DEP1P2P3(n)	((n) << 19)
+#define GUSB3PIPECTL_DEP1P2P3_MASK	GUSB3PIPECTL_DEP1P2P3(7)
+#define GUSB3PIPECTL_DEP1P2P3_EN	GUSB3PIPECTL_DEP1P2P3(1)
+#define GUSB3PIPECTL_DEPOCHANGE	BIT(18)
+#define GUSB3PIPECTL_SUSPHY     BIT(17)
+#define GUSB3PIPECTL_LFPSFILT	BIT(9)
+#define GUSB3PIPECTL_RX_DETOPOLL	BIT(8)
+#define GUSB3PIPECTL_TX_DEEPH_MASK	GUSB3PIPECTL_TX_DEEPH(3)
+#define GUSB3PIPECTL_TX_DEEPH(n)	((n) << 1)
 
 /* Global TX Fifo Size Register */
 #define GTXFIFOSIZ_TXFDEF(n)    ((n)&0xffff)
@@ -233,10 +266,12 @@
 
 /* Global Event Count/Size Register */
 #define GEVNTCOUNT_EVENTSIZ_MASK   (0xfffc)
-#define GEVNTSIZ_EVNTINTRPTMASK    (1 << 31)
+#define GEVNTSIZ_EVNTINTRPTMASK    BIT(31)
 
 /* Device Configuration Register */
-#define DCFG_LPM_CAP                (1 << 22)
+#define DCFG_LPM_CAP                BIT(22)
+#define DCFG_IGNSTRMPP	            BIT(23)
+
 #define DCFG_INTRNUM(_intr)         ((_intr) << 12)
 #define DCFG_INTRNUM_MASK           DCFG_INTRNUM(0xf)
 #define DCFG_INTRNUM_GET(_v)        (((_v) & DCFG_INTRNUM_MASK) >> 12)
@@ -245,24 +280,23 @@
 #define DCFG_DEVADDR_MASK           DCFG_DEVADDR(0x7f)
 #define DCFG_DEVADDR_GET(_v)        (((_v) & DCFG_DEVADDR_MASK) >> 3)
 
-#define DCFG_SPEED_MASK (7 << 0)
-#define DCFG_SUPERSPEED (4 << 0)
-#define DCFG_HIGHSPEED  (0 << 0)
-#define DCFG_FULLSPEED2 (1 << 0)
-#define DCFG_LOWSPEED   (2 << 0)
-#define DCFG_FULLSPEED1 (3 << 0)
-
-#define DCFG_LPM_CAP (1 << 22)
+#define DCFG_SPEED_MASK      (7 << 0)
+#define DCFG_SUPERSPEED_PLUS (5 << 0)
+#define DCFG_SUPERSPEED      (4 << 0)
+#define DCFG_HIGHSPEED       (0 << 0)
+#define DCFG_FULLSPEED2      (1 << 0)
+#define DCFG_LOWSPEED        (2 << 0)
+#define DCFG_FULLSPEED1      (3 << 0)
 
 /* Device Control Register */
-#define DCTL_RUN_STOP (1 << 31)
-#define DCTL_CSFTRST  (1 << 30)
-#define DCTL_LSFTRST  (1 << 29)
+#define DCTL_RUN_STOP BIT(31)
+#define DCTL_CSFTRST  BIT(30)
+#define DCTL_LSFTRST  BIT(29)
 
 #define DCTL_HIRD_THRES_MASK (0x1f << 24)
 #define DCTL_HIRD_THRES(n)   ((n) << 24)
 
-#define DCTL_APPL1RES (1 << 23)
+#define DCTL_APPL1RES BIT(23)
 
 /* These apply for core versions 1.87a and earlier */
 #define DCTL_TRGTULST_MASK     (0x0f << 17)
@@ -274,15 +308,15 @@
 #define DCTL_TRGTULST_SS_INACT (DCTL_TRGTULST(6))
 
 /* These apply for core versions 1.94a and later */
-#define DCTL_KEEP_CONNECT (1 << 19)
-#define DCTL_L1_HIBER_EN  (1 << 18)
-#define DCTL_CRS          (1 << 17)
-#define DCTL_CSS          (1 << 16)
+#define DCTL_KEEP_CONNECT BIT(19)
+#define DCTL_L1_HIBER_EN  BIT(18)
+#define DCTL_CRS          BIT(17)
+#define DCTL_CSS          BIT(16)
 
-#define DCTL_INITU2ENA    (1 << 12)
-#define DCTL_ACCEPTU2ENA  (1 << 11)
-#define DCTL_INITU1ENA    (1 << 10)
-#define DCTL_ACCEPTU1ENA  (1 << 9)
+#define DCTL_INITU2ENA    BIT(12)
+#define DCTL_ACCEPTU2ENA  BIT(11)
+#define DCTL_INITU1ENA    BIT(10)
+#define DCTL_ACCEPTU1ENA  BIT(9)
 #define DCTL_TSTCTRL_MASK (0xf << 1)
 
 #define DCTL_ULSTCHNGREQ_MASK (0x0f << 5)
@@ -297,47 +331,48 @@
 #define DCTL_ULSTCHNG_LOOPBACK    (DCTL_ULSTCHNGREQ(11))
 
 /* Device Event Enable Register */
-#define DEVTEN_VNDRDEVTSTRCVEDEN   (1 << 12)
-#define DEVTEN_EVNTOVERFLOWEN      (1 << 11)
-#define DEVTEN_CMDCMPLTEN          (1 << 10)
-#define DEVTEN_ERRTICERREN         (1 << 9)
-#define DEVTEN_SOFEN               (1 << 7)
-#define DEVTEN_EOPFEN              (1 << 6)
-#define DEVTEN_HIBERNATIONREQEVTEN (1 << 5)
-#define DEVTEN_WKUPEVTEN           (1 << 4)
-#define DEVTEN_ULSTCNGEN           (1 << 3)
-#define DEVTEN_CONNECTDONEEN       (1 << 2)
-#define DEVTEN_USBRSTEN            (1 << 1)
-#define DEVTEN_DISCONNEVTEN        (1 << 0)
+#define DEVTEN_VNDRDEVTSTRCVEDEN   BIT(12)
+#define DEVTEN_EVNTOVERFLOWEN      BIT(11)
+#define DEVTEN_CMDCMPLTEN          BIT(10)
+#define DEVTEN_ERRTICERREN         BIT(9)
+#define DEVTEN_SOFEN               BIT(7)
+#define DEVTEN_EOPFEN              BIT(6)
+#define DEVTEN_HIBERNATIONREQEVTEN BIT(5)
+#define DEVTEN_WKUPEVTEN           BIT(4)
+#define DEVTEN_ULSTCNGEN           BIT(3)
+#define DEVTEN_CONNECTDONEEN       BIT(2)
+#define DEVTEN_USBRSTEN            BIT(1)
+#define DEVTEN_DISCONNEVTEN        BIT(0)
 
 /* Device Status Register */
-#define DSTS_DCNRD (1 << 29)
+#define DSTS_DCNRD BIT(29)
 
 /* This applies for core versions 1.87a and earlier */
-#define DSTS_PWRUPREQ (1 << 24)
+#define DSTS_PWRUPREQ BIT(24)
 
 /* These apply for core versions 1.94a and later */
-#define DSTS_RSS (1 << 25)
-#define DSTS_SSS (1 << 24)
+#define DSTS_RSS BIT(25)
+#define DSTS_SSS BIT(24)
 
-#define DSTS_COREIDLE   (1 << 23)
-#define DSTS_DEVCTRLHLT (1 << 22)
+#define DSTS_COREIDLE   BIT(23)
+#define DSTS_DEVCTRLHLT BIT(22)
 
 #define DSTS_USBLNKST_MASK (0x0f << 18)
 #define DSTS_USBLNKST(n)   (((n) & 0x0f) << 18)
 
-#define DSTS_RXFIFOEMPTY (1 << 17)
+#define DSTS_RXFIFOEMPTY BIT(17)
 
 #define DSTS_SOFFN_MASK (0x3fff << 3)
 #define DSTS_SOFFN(n)   (((n)&DSTS_SOFFN_MASK) >> 3)
 
 #define DSTS_CONNECTSPD (7 << 0)
 
-#define DSTS_SUPERSPEED (4 << 0)
-#define DSTS_HIGHSPEED  (0 << 0)
-#define DSTS_FULLSPEED2 (1 << 0)
-#define DSTS_LOWSPEED   (2 << 0)
-#define DSTS_FULLSPEED1 (3 << 0)
+#define DSTS_SUPERSPEED_PLUS (5 << 0)
+#define DSTS_SUPERSPEED      (4 << 0)
+#define DSTS_HIGHSPEED       (0 << 0)
+#define DSTS_FULLSPEED2      (1 << 0)
+#define DSTS_LOWSPEED        (2 << 0)
+#define DSTS_FULLSPEED1      (3 << 0)
 
 /* Device Generic Command Register */
 #define DGCMD_SET_LMP          0x01
@@ -353,28 +388,28 @@
 #define DGCMD_SET_ENDPOINT_NRDY    0x0c
 #define DGCMD_RUN_SOC_BUS_LOOPBACK 0x10
 
-#define DGCMD_CMDSTATUS             (1 << 15)
-#define DGCMD_CMDACT                (1 << 10)
-#define DGCMD_CMDIOC                (1 << 8)
+#define DGCMD_CMDSTATUS             BIT(15)
+#define DGCMD_CMDACT                BIT(10)
+#define DGCMD_CMDIOC                BIT(8)
 #define DGCMD_CMDTYPE_MASK          (0xff << 0)
 #define DGCMD_CMDTYPE_GET(_v)       ((_v) & 0xff)
 
 /* Device Generic Command Parameter Register */
-#define DGCMDPAR_FORCE_LINKPM_ACCEPT (1 << 0)
+#define DGCMDPAR_FORCE_LINKPM_ACCEPT BIT(0)
 #define DGCMDPAR_FIFO_NUM(n)         ((n) << 0)
 #define DGCMDPAR_RX_FIFO             (0 << 5)
-#define DGCMDPAR_TX_FIFO             (1 << 5)
+#define DGCMDPAR_TX_FIFO             BIT(5)
 #define DGCMDPAR_LOOPBACK_DIS        (0 << 0)
-#define DGCMDPAR_LOOPBACK_ENA        (1 << 0)
+#define DGCMDPAR_LOOPBACK_ENA        BIT(0)
 
 /* Device Endpoint Command Register */
 #define DEPCMD_PARAM_SHIFT    16
 #define DEPCMD_PARAM(x)       ((x) << DEPCMD_PARAM_SHIFT)
 #define DEPCMD_PARAM_MASK     DEPCMD_PARAM(0xffff)
-#define DEPCMD_STATUS         (1 << 15)
-#define DEPCMD_HIPRI_FORCERM  (1 << 11)
-#define DEPCMD_CMDACT         (1 << 10)
-#define DEPCMD_CMDIOC         (1 << 8)
+#define DEPCMD_STATUS         BIT(15)
+#define DEPCMD_HIPRI_FORCERM  BIT(11)
+#define DEPCMD_CMDACT         BIT(10)
+#define DEPCMD_CMDIOC         BIT(8)
 
 #define DEPCMD_STARTCFG       (0x09 << 0)
 #define DEPCMD_ENDXFER        (0x08 << 0)
@@ -394,17 +429,17 @@
 #define DEPCMD_CMD_GET(_v)       ((_v) & 0xff)
 
 /* The EP number goes 0..31 so ep0 is always out and ep1 is always in */
-#define DALEPENA_EP(n) (1 << n)
+#define DALEPENA_EP(n) BIT(n)
 
 #define DEPCMD_TYPE_CONTROL 0
 #define DEPCMD_TYPE_ISOC    1
 #define DEPCMD_TYPE_BULK    2
 #define DEPCMD_TYPE_INTR    3
 
-#define EVENT_PENDING   (1 << 0)
+#define EVENT_PENDING   BIT(0)
 
-#define EP_FLAG_STALLED (1 << 0)
-#define EP_FLAG_WEDGED  (1 << 1)
+#define EP_FLAG_STALLED BIT(0)
+#define EP_FLAG_WEDGED  BIT(1)
 
 #define EP_DIRECTION_TX true
 #define EP_DIRECTION_RX false
@@ -412,15 +447,15 @@
 #define TRB_NUM  32
 #define TRB_MASK (TRB_NUM - 1)
 
-#define EP_ENABLED         (1 << 0)
-#define EP_STALL           (1 << 1)
-#define EP_WEDGE           (1 << 2)
-#define EP_BUSY            (1 << 4)
-#define EP_PENDING_REQUEST (1 << 5)
-#define EP_MISSED_ISOC     (1 << 6)
+#define EP_ENABLED         BIT(0)
+#define EP_STALL           BIT(1)
+#define EP_WEDGE           BIT(2)
+#define EP_BUSY            BIT(4)
+#define EP_PENDING_REQUEST BIT(5)
+#define EP_MISSED_ISOC     BIT(6)
 
 /* This last one is specific to EP0 */
-#define EP0_DIR_IN (1 << 31)
+#define EP0_DIR_IN BIT(31)
 
 enum dwc3_link_state {
     /* In SuperSpeed */
@@ -453,13 +488,13 @@ enum dwc3_link_state {
 #define TRB_STS_XFER_IN_PROG 4
 
 /* TRB Control */
-#define TRB_CTRL_HWO         (1 << 0)
-#define TRB_CTRL_LST         (1 << 1)
-#define TRB_CTRL_CHN         (1 << 2)
-#define TRB_CTRL_CSP         (1 << 3)
+#define TRB_CTRL_HWO         BIT(0)
+#define TRB_CTRL_LST         BIT(1)
+#define TRB_CTRL_CHN         BIT(2)
+#define TRB_CTRL_CSP         BIT(3)
 #define TRB_CTRL_TRBCTL(n)   (((n) >> 4) & 0x3f)
-#define TRB_CTRL_ISP_IMI     (1 << 10)
-#define TRB_CTRL_IOC         (1 << 11)
+#define TRB_CTRL_ISP_IMI     BIT(10)
+#define TRB_CTRL_IOC         BIT(11)
 #define TRB_CTRL_SID_SOFN(n) (((n) >> 14) & 0xffff)
 
 typedef enum TRBControlType {
@@ -555,13 +590,14 @@ struct dwc3_event_depevt {
     uint32_t status : 4;
 
 /* Within XferNotReady */
-#define DEPEVT_STATUS_TRANSFER_ACTIVE (1 << 3)
+#define DEPEVT_STATUS_TRANSFER_ACTIVE BIT(3)
 
-/* Within XferComplete */
-#define DEPEVT_STATUS_BUSERR (1 << 0)
-#define DEPEVT_STATUS_SHORT  (1 << 1)
-#define DEPEVT_STATUS_IOC    (1 << 2)
-#define DEPEVT_STATUS_LST    (1 << 3)
+/* Within XferComplete or XferInProgress */
+#define DEPEVT_STATUS_BUSERR      BIT(0)
+#define DEPEVT_STATUS_SHORT       BIT(1)
+#define DEPEVT_STATUS_IOC         BIT(2)
+#define DEPEVT_STATUS_LST         BIT(3) /* XferComplete */
+#define DEPEVT_STATUS_MISSED_ISOC BIT(3) /* XferInProgress */
 
 /* Stream event only */
 #define DEPEVT_STREAMEVT_FOUND    1
@@ -570,6 +606,11 @@ struct dwc3_event_depevt {
 /* Control-only Status */
 #define DEPEVT_STATUS_CONTROL_DATA   1
 #define DEPEVT_STATUS_CONTROL_STATUS 2
+#define DEPEVT_STATUS_CONTROL_PHASE(n)	((n) & 3)
+
+/* In response to Start Transfer */
+#define DEPEVT_TRANSFER_NO_RESOURCE	1
+#define DEPEVT_TRANSFER_BUS_EXPIRY	2
 
     uint32_t parameters : 16;
 } QEMU_PACKED;
@@ -653,16 +694,16 @@ union dwc3_event {
 
 #define DEPCFG_INT_NUM(n)          (((n) >> 0) & 0x1f)
 #define DEPCFG_EVENT_EN(_v)        (((_v) >> 7) & 0x7f)
-#define DEPCFG_XFER_COMPLETE_EN    (1 << 8)
-#define DEPCFG_XFER_IN_PROGRESS_EN (1 << 9)
-#define DEPCFG_XFER_NOT_READY_EN   (1 << 10)
-#define DEPCFG_FIFO_ERROR_EN       (1 << 11)
-#define DEPCFG_STREAM_EVENT_EN     (1 << 13)
+#define DEPCFG_XFER_COMPLETE_EN    BIT(8)
+#define DEPCFG_XFER_IN_PROGRESS_EN BIT(9)
+#define DEPCFG_XFER_NOT_READY_EN   BIT(10)
+#define DEPCFG_FIFO_ERROR_EN       BIT(11)
+#define DEPCFG_STREAM_EVENT_EN     BIT(13)
 #define DEPCFG_BINTERVAL_M1(n)     (((n) >> 16) & 0xff)
-#define DEPCFG_STREAM_CAPABLE      (1 << 24)
+#define DEPCFG_STREAM_CAPABLE      BIT(24)
 #define DEPCFG_EP_NUMBER(n)        (((n) >> 25) & 0x1f)
-#define DEPCFG_BULK_BASED          (1 << 30)
-#define DEPCFG_FIFO_BASED          (1 << 31)
+#define DEPCFG_BULK_BASED          BIT(30)
+#define DEPCFG_FIFO_BASED          BIT(31)
 
 #define DEPXFERCFG_NUMXFERRES(_v)  ((_v) & 0xffff)
 #endif

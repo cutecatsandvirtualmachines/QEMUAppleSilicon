@@ -1,5 +1,7 @@
 /*
- * Copyright (c) 2023-2024 Visual Ehrmanntraut.
+ * Apple OS Boot Logic.
+ *
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -17,24 +19,12 @@
 #ifndef HW_ARM_APPLE_SILICON_BOOT_H
 #define HW_ARM_APPLE_SILICON_BOOT_H
 
-
-#define ENABLE_BASEBAND 0
-//#define ENABLE_BASEBAND 1
-//#define ENABLE_SEP 1
-#define ENABLE_SEP 1
-//#define ENABLE_SEP_SECURITY 0
-#define ENABLE_SEP_SECURITY 1
-//#define ENABLE_ROSWELL 1
-#define ENABLE_ROSWELL 0
+// #define ENABLE_BASEBAND
+#define ENABLE_DATA_ENCRYPTION
 
 #include "qemu/osdep.h"
 #include "exec/hwaddr.h"
-#include "hw/arm/apple-silicon/dtb.h"
-
-#define BOOT_ARGS_REVISION_2 (2)
-#define BOOT_ARGS_VERSION_2 (2)
-#define BOOT_ARGS_VERSION_4 (4)
-#define BOOT_LINE_LENGTH (608)
+#include "hw/arm/apple-silicon/dt.h"
 
 #define LC_SYMTAB (0x2)
 #define LC_UNIXTHREAD (0x5)
@@ -78,6 +68,10 @@ typedef struct {
     uint32_t loc_rel_n;
 } MachoDysymtabCommand;
 
+#define VM_PROT_READ (0x01)
+#define VM_PROT_WRITE (0x02)
+#define VM_PROT_EXECUTE (0x04)
+
 typedef struct {
     uint32_t cmd;
     uint32_t cmd_size;
@@ -107,7 +101,7 @@ typedef struct {
     uint32_t reserved3;
 } MachoSection64;
 
-#define SECTION_TYPE (0x000000ff)
+#define SECTION_TYPE (0x000000FF)
 #define S_NON_LAZY_SYMBOL_POINTERS (0x6)
 
 typedef struct {
@@ -125,14 +119,35 @@ typedef struct {
     uint64_t version;
 } MachoSourceVersionCommand;
 
+#define PLATFORM_UNKNOWN (0)
 #define PLATFORM_MACOS (1)
 #define PLATFORM_IOS (2)
 #define PLATFORM_TVOS (3)
 #define PLATFORM_WATCHOS (4)
 #define PLATFORM_BRIDGEOS (5)
+#define PLATFORM_MAC_CATALYST (6)
+#define PLATFORM_IOS_SIMULATOR (7)
+#define PLATFORM_TVOS_SIMULATOR (8)
+#define PLATFORM_WATCHOS_SIMULATOR (9)
+#define PLATFORM_DRIVERKIT (10)
+#define PLATFORM_VISIONOS (11)
+#define PLATFORM_VISIONOS_SIMULATOR (12)
+#define PLATFORM_FIRMWARE (13)
+#define PLATFORM_SEPOS (14)
+#define PLATFORM_MACOS_EXCLAVECORE (15)
+#define PLATFORM_MACOS_EXCLAVEKIT (16)
+#define PLATFORM_IOS_EXCLAVECORE (17)
+#define PLATFORM_IOS_EXCLAVEKIT (18)
+#define PLATFORM_TVOS_EXCLAVECORE (19)
+#define PLATFORM_TVOS_EXCLAVEKIT (20)
+#define PLATFORM_WATCHOS_EXCLAVECORE (21)
+#define PLATFORM_WATCHOS_EXCLAVEKIT (22)
+#define PLATFORM_VISIONOS_EXCLAVECORE (23)
+#define PLATFORM_VISIONOS_EXCLAVEKIT (24)
 
 #define BUILD_VERSION_MAJOR(_v) (((_v) & 0xFFFF0000) >> 16)
-#define BUILD_VERSION_MINOR(_v) (((_v) & 0x0000FF00) >> 8)
+#define BUILD_VERSION_MINOR(_v) (((_v) & 0xFF00) >> 8)
+#define BUILD_VERSION_PATCH(_v) ((_v) & 0xFF)
 
 typedef struct {
     uint32_t cmd;
@@ -158,8 +173,6 @@ typedef struct {
     uint32_t reserved;
 } MachoHeader64;
 
-extern MachoHeader64 *xnu_header;
-
 typedef struct {
     uint32_t cmd;
     uint32_t cmd_size;
@@ -181,12 +194,20 @@ typedef struct {
 #define N_EXT (0x01)
 
 typedef struct {
-    unsigned long base_addr;
-    unsigned long display;
-    unsigned long row_bytes;
-    unsigned long width;
-    unsigned long height;
-    unsigned long depth;
+    uint64_t base_addr;
+    uint64_t display;
+    uint64_t row_bytes;
+    uint64_t width;
+    uint64_t height;
+    union {
+        struct {
+            uint8_t depth : 8;
+            uint8_t rotate : 8;
+            uint8_t scale : 8;
+            uint8_t boot_rotate : 8;
+        };
+        uint64_t raw;
+    } depth;
 } AppleVideoArgs;
 
 typedef struct {
@@ -203,6 +224,8 @@ typedef struct {
     uint8_t random_bytes[0x10];
 } AppleMonitorBootArgs;
 
+#define BOOT_FLAGS_DARK_BOOT BIT(0)
+
 typedef struct {
     uint16_t revision;
     uint16_t version;
@@ -214,10 +237,27 @@ typedef struct {
     uint32_t machine_type;
     uint64_t device_tree_ptr;
     uint32_t device_tree_length;
-    char cmdline[BOOT_LINE_LENGTH];
+    char cmdline[0x260];
     uint64_t boot_flags;
     uint64_t mem_size_actual;
-} AppleKernelBootArgs;
+} AppleKernelBootArgsRev2;
+
+typedef struct {
+    uint16_t revision;
+    uint16_t version;
+    uint64_t virt_base;
+    uint64_t phys_base;
+    uint64_t mem_size;
+    uint64_t kernel_top;
+    AppleVideoArgs video_args;
+    uint32_t machine_type;
+    uint64_t device_tree_ptr;
+    uint32_t device_tree_length;
+    char cmdline[0x400];
+    uint64_t boot_flags;
+    uint64_t mem_size_actual;
+    uint64_t reserved;
+} AppleKernelBootArgsRev3;
 
 #define EMBEDDED_PANIC_HEADER_FLAG_COREDUMP_COMPLETE (0x01)
 #define EMBEDDED_PANIC_HEADER_FLAG_STACKSHOT_SUCCEEDED (0x02)
@@ -260,13 +300,15 @@ typedef struct {
     char macos_version[EMBEDDED_PANIC_HEADER_OSVERSION_LEN];
 } QEMU_PACKED AppleEmbeddedPanicHeader;
 
+#define IOP_SEGMENT_RANGE_NEEDS_BACKUP BIT(2)
+
 typedef struct {
     uint64_t phys;
     uint64_t virt;
     uint64_t remap;
     uint32_t size;
-    uint32_t flag;
-} QEMU_PACKED AppleIopSegmentRange;
+    uint32_t flags;
+} AppleIOPSegmentRange;
 
 #define XNU_MAX_NVRAM_SIZE (0xFFFF * 0x10)
 #define XNU_BNCH_SIZE (32)
@@ -281,91 +323,96 @@ typedef struct {
     uint64_t ramdisk_size;
     hwaddr trustcache_addr;
     uint64_t trustcache_size;
+    hwaddr ro_lower;
+    hwaddr ro_upper;
     hwaddr sep_fw_addr;
     uint64_t sep_fw_size;
+    hwaddr tz0_addr;
+    uint64_t tz0_size;
     hwaddr kern_boot_args_addr;
     uint64_t kern_boot_args_size;
+    hwaddr top_of_kernel_data_pa;
     hwaddr tz1_boot_args_pa;
     hwaddr dram_base;
     uint64_t dram_size;
     uint8_t nvram_data[XNU_MAX_NVRAM_SIZE];
-    uint64_t nvram_size;
+    uint32_t nvram_size;
     char *ticket_data;
-    uint64_t ticket_length;
+    gsize ticket_length;
     uint8_t boot_nonce_hash[XNU_BNCH_SIZE];
 } AppleBootInfo;
 
-MachoHeader64 *macho_load_file(const char *filename,
-                               MachoHeader64 **secure_monitor);
+MachoHeader64 *apple_boot_load_macho_file(const char *filename,
+                                          MachoHeader64 **secure_monitor);
 
-MachoHeader64 *macho_parse(uint8_t *data, uint32_t len);
+MachoHeader64 *apple_boot_parse_macho(uint8_t *data, uint32_t len);
 
-uint8_t *macho_get_buffer(MachoHeader64 *hdr);
+uint8_t *apple_boot_get_macho_buffer(MachoHeader64 *header);
 
-void macho_free(MachoHeader64 *hdr);
+uint32_t apple_boot_build_version(MachoHeader64 *header);
 
-uint32_t macho_build_version(MachoHeader64 *mh);
+uint32_t apple_boot_platform(MachoHeader64 *header);
 
-uint32_t macho_platform(MachoHeader64 *mh);
+const char *apple_boot_platform_string(MachoHeader64 *header);
 
-const char *macho_platform_string(MachoHeader64 *mh);
+void apple_boot_get_kc_bounds(MachoHeader64 *header, uint64_t *text_base,
+                              uint64_t *kc_base, uint64_t *kc_end,
+                              uint64_t *ro_lower, uint64_t *ro_upper);
 
-void macho_highest_lowest(MachoHeader64 *mh, uint64_t *lowaddr,
-                          uint64_t *highaddr);
+MachoFilesetEntryCommand *apple_boot_get_fileset(MachoHeader64 *header,
+                                                 const char *entry);
 
-void macho_text_base(MachoHeader64 *mh, uint64_t *text_base);
+MachoHeader64 *apple_boot_get_fileset_header(MachoHeader64 *header,
+                                             const char *entry);
 
-MachoFilesetEntryCommand *macho_get_fileset(MachoHeader64 *header,
-                                            const char *entry);
+MachoSegmentCommand64 *apple_boot_get_segment(MachoHeader64 *header,
+                                              const char *name);
 
-MachoHeader64 *macho_get_fileset_header(MachoHeader64 *header,
-                                        const char *entry);
+MachoSection64 *apple_boot_get_section(MachoSegmentCommand64 *segment,
+                                       const char *name);
 
-MachoSegmentCommand64 *macho_get_segment(MachoHeader64 *header,
-                                         const char *segname);
+/// Modify a XNU virtual address to be fixed up and slide-adjusted.
+hwaddr apple_boot_fixup_slide_va(hwaddr va);
 
-MachoSection64 *macho_get_section(MachoSegmentCommand64 *seg, const char *name);
+/// Convert a XNU virtual address to a host pointer.
+void *apple_boot_va_to_ptr(hwaddr va);
 
-uint64_t xnu_slide_hdr_va(MachoHeader64 *header, uint64_t hdr_va);
+bool apple_boot_contains_boot_arg(const char *boot_args, const char *arg,
+                                  bool match_prefix);
 
-void *xnu_va_to_ptr(uint64_t va);
+void apple_boot_setup_monitor_boot_args(
+    AddressSpace *as, MemoryRegion *mem, hwaddr bootargs_addr, hwaddr virt_base,
+    hwaddr phys_base, hwaddr mem_size, hwaddr kern_args, hwaddr kern_entry,
+    hwaddr kern_phys_base, hwaddr kern_phys_slide, hwaddr kern_virt_slide,
+    hwaddr kern_text_section_off);
+void apple_boot_setup_bootargs(uint32_t build_version, AddressSpace *as,
+                               MemoryRegion *mem, hwaddr addr, hwaddr virt_base,
+                               hwaddr phys_base, hwaddr mem_size,
+                               hwaddr kernel_top, hwaddr dtb_va,
+                               hwaddr dtb_size, AppleVideoArgs *video_args,
+                               const char *cmdline, hwaddr mem_size_actual);
 
-bool xnu_contains_boot_arg(const char *bootArgs, const char *arg,
-                           bool prefixmatch);
+void apple_boot_allocate_segment_records(AppleDTNode *memory_map,
+                                         MachoHeader64 *header);
 
-void apple_monitor_setup_boot_args(
-    const char *name, AddressSpace *as, MemoryRegion *mem, hwaddr bootargs_addr,
-    hwaddr virt_base, hwaddr phys_base, hwaddr mem_size, hwaddr kern_args,
-    hwaddr kern_entry, hwaddr kern_phys_base, hwaddr kern_phys_slide,
-    hwaddr kern_virt_slide, hwaddr kern_text_section_off);
-void macho_setup_bootargs(const char *name, AddressSpace *as, MemoryRegion *mem,
-                          hwaddr bootargs_pa, hwaddr virt_base,
-                          hwaddr phys_base, hwaddr mem_size,
-                          hwaddr top_of_kernel_data_pa, hwaddr dtb_va,
-                          hwaddr dtb_size, AppleVideoArgs v_bootargs,
-                          const char *cmdline);
+hwaddr apple_boot_load_macho(MachoHeader64 *header, AddressSpace *as,
+                             MemoryRegion *mem, AppleDTNode *memory_map,
+                             hwaddr phys_base, hwaddr virt_slide);
 
-void macho_allocate_segment_records(DTBNode *memory_map, MachoHeader64 *mh);
+void apple_boot_load_raw_file(const char *filename, AddressSpace *as,
+                              MemoryRegion *mem, hwaddr file_pa,
+                              uint64_t *size);
 
-hwaddr arm_load_macho(MachoHeader64 *mh, AddressSpace *as, MemoryRegion *mem,
-                      DTBNode *memory_map, hwaddr phys_base, hwaddr virt_slide);
+AppleDTNode *apple_boot_load_dt_file(const char *filename);
 
-void macho_load_raw_file(const char *filename, AddressSpace *as,
-                         MemoryRegion *mem, const char *name, hwaddr file_pa,
-                         uint64_t *size);
+void apple_boot_populate_dt(AppleDTNode *root, AppleBootInfo *info);
 
-DTBNode *load_dtb_from_file(char *filename);
+void apple_boot_finalise_dt(AppleDTNode *root, AddressSpace *as,
+                            MemoryRegion *mem, AppleBootInfo *info);
 
-void macho_populate_dtb(DTBNode *root, AppleBootInfo *info);
+uint8_t *apple_boot_load_trustcache_file(const char *filename, uint64_t *size);
 
-void macho_load_dtb(DTBNode *root, AddressSpace *as, MemoryRegion *mem,
-                    const char *name, AppleBootInfo *info);
-
-uint8_t *load_trustcache_from_file(const char *filename, uint64_t *size);
-void macho_load_trustcache(void *trustcache, uint64_t size, AddressSpace *as,
-                           MemoryRegion *mem, hwaddr pa);
-
-void macho_load_ramdisk(const char *filename, AddressSpace *as,
-                        MemoryRegion *mem, hwaddr pa, uint64_t *size);
+void apple_boot_load_ramdisk(const char *filename, AddressSpace *as,
+                             MemoryRegion *mem, hwaddr pa, uint64_t *size);
 
 #endif /* HW_ARM_APPLE_SILICON_BOOT_H */

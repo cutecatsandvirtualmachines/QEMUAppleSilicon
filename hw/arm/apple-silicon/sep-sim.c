@@ -1,8 +1,8 @@
 /*
  * Apple SEP.
  *
- * Copyright (c) 2023-2024 Visual Ehrmanntraut (VisualEhrmanntraut).
- * Copyright (c) 2023-2024 Christian Inci (chris-pcguy).
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ * Copyright (c) 2023-2025 Christian Inci (chris-pcguy).
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,17 +20,49 @@
 
 #include "qemu/osdep.h"
 #include "crypto/hash.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/arm/apple-silicon/sep-sim.h"
 #include "hw/misc/apple-silicon/a7iop/core.h"
 #include "hw/misc/apple-silicon/a7iop/mailbox/core.h"
+#include "hw/resettable.h"
 #include "qapi/error.h"
+#include "qemu/guest-random.h"
 #include "qemu/lockable.h"
 #include "qemu/log.h"
-#include "qemu/main-loop.h"
-#include "sysemu/dma.h"
 #include "art.h"
 #include "libtasn1.h"
+#include "system/dma.h"
+
+typedef struct {
+    uint8_t ep;
+    uint8_t tag;
+    uint8_t op;
+    uint8_t param;
+    uint32_t data;
+} QEMU_PACKED SEPMessage;
+
+typedef struct {
+    uint8_t ep;
+    uint8_t tag;
+    uint8_t op;
+    uint8_t id;
+    uint32_t name;
+} QEMU_PACKED EPAdvertisementMessage;
+
+typedef struct {
+    uint8_t ep;
+    uint8_t tag;
+    uint16_t size;
+    uint32_t address;
+} QEMU_PACKED L4InfoMessage;
+
+typedef struct {
+    uint8_t ep;
+    uint8_t tag;
+    uint8_t op;
+    uint8_t id;
+    uint32_t data;
+} QEMU_PACKED SetOOLMessage;
 
 typedef enum {
     SEP_STATUS_SLEEPING = 0,
@@ -89,6 +121,8 @@ enum {
     CONTROL_OP_TTY_IN = 10,
     CONTROL_OP_SLEEP = 12,
     CONTROL_OP_NOTIFY_ALIVE = 13,
+    CONTROL_OP_SEED_DPA = 15,
+    CONTROL_OP_GENERATE_RANDOM_DATA = 16,
     CONTROL_OP_NAP = 19,
     CONTROL_OP_GET_SECURITY_MODE = 20,
     CONTROL_OP_SELF_TEST = 24,
@@ -110,8 +144,11 @@ enum {
 };
 
 enum {
-    ART_STORAGE_OP_SEND_ART = 20,
-    ART_STORAGE_OP_ART_RECEIVED = 21,
+    ART_STORAGE_OP_ART_LOAD = 1, // AppleSEPARTStorage::handle_first_connected
+    ART_STORAGE_OP_NO_ART = 2,
+    ART_STORAGE_OP_MANIFEST = 3,
+    ART_STORAGE_OP_INCOMING = 20, // AppleSEPARTStorage::_msgAction
+    ART_STORAGE_OP_RECEIVED = 21,
 };
 
 enum {
@@ -203,6 +240,7 @@ enum {
     BOOTSTRAP_OP_LOAD_SEP_ART = 7,
     BOOTSTRAP_OP_NOTIFY_OS_ACTIVE_ASYNC = 13,
     BOOTSTRAP_OP_SEND_DPA = 15,
+    BOOTSTRAP_OP_OPCODE_16 = 16,
     BOOTSTRAP_OP_NOTIFY_OS_ACTIVE = 21,
     BOOTSTRAP_OP_PING_ACK = 101,
     BOOTSTRAP_OP_STATUS_REPLY = 102,
@@ -213,6 +251,7 @@ enum {
     BOOTSTRAP_OP_ART_ACCEPTED = 107,
     BOOTSTRAP_OP_RESUMED_FROM_RAM = 108,
     BOOTSTRAP_OP_DPA_SENT = 115,
+    BOOTSTRAP_OP_OPCODE_16_RESPONSE = 116,
     BOOTSTRAP_OP_LOG_RAW = 201,
     BOOTSTRAP_OP_LOG_PRINTABLE = 202,
     BOOTSTRAP_OP_ANNOUNCE_STATUS = 210,
@@ -348,8 +387,7 @@ static void apple_sep_sim_handle_control_msg(AppleSEPSimState *s,
         asn1_write_value(art, "Version", &val, sizeof(val));
         uint16_t val16 = 0;
         asn1_write_value(art, "Info.Counter", &val16, sizeof(val16));
-        char byte0x20[32];
-        memset(byte0x20, 0, sizeof(byte0x20));
+        char byte0x20[32] = { 0 };
         asn1_write_value(art, "Info.ManifestHash", byte0x20, 20);
         asn1_write_value(art, "Info.SleepHash", byte0x20, 20);
         asn1_write_value(art, "Info.Nonce", byte0x20, 0);
@@ -368,7 +406,7 @@ static void apple_sep_sim_handle_control_msg(AppleSEPSimState *s,
                           "EP_XART_STORAGE: Failed to write ART to OOL");
         }
         apple_sep_sim_send_message(s, EP_ART_STORAGE, 0,
-                                   ART_STORAGE_OP_SEND_ART, 0, 0);
+                                   ART_STORAGE_OP_INCOMING, 0, 0);
         break;
     }
     default:
@@ -381,7 +419,7 @@ static void apple_sep_sim_handle_control_msg(AppleSEPSimState *s,
 static void apple_sep_sim_handle_arts_msg(AppleSEPSimState *s, SEPMessage *msg)
 {
     switch (msg->op) {
-    case ART_STORAGE_OP_ART_RECEIVED:
+    case ART_STORAGE_OP_RECEIVED:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_ART_STORAGE: ART_RECEIVED\n");
         break;
     default:
@@ -439,7 +477,8 @@ static void apple_sep_sim_handle_xart_msg(AppleSEPSimState *s, bool slave,
 
 static void apple_sep_sim_handle_l4info(AppleSEPSimState *s, L4InfoMessage *msg)
 {
-    qemu_log_mask(LOG_GUEST_ERROR, "EP_L4INFO: address 0x%" PRIx64 " size 0x%X\n",
+    qemu_log_mask(LOG_GUEST_ERROR,
+                  "EP_L4INFO: address 0x%" PRIx64 " size 0x%X\n",
                   (uint64_t)msg->address << 12, msg->size << 12);
     s->ool_state[EP_CONTROL].in_addr = (uint64_t)msg->address << 12;
     s->ool_state[EP_CONTROL].in_size = msg->size << 12;
@@ -495,12 +534,36 @@ static void apple_sep_sim_advertise_eps(AppleSEPSimState *s)
 static void apple_sep_sim_handle_bootstrap_msg(AppleSEPSimState *s,
                                                SEPMessage *msg)
 {
+    uint32_t randval = 0;
     switch (msg->op) {
+    case BOOTSTRAP_OP_PING:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: PING\n");
+        // needed for S8000 and T8015
+
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_PING_ACK, 0, 0);
+        break;
     case BOOTSTRAP_OP_GET_STATUS:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: GET_STATUS\n");
 
         apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
                                    BOOTSTRAP_OP_STATUS_REPLY, 0, s->status);
+        break;
+    case BOOTSTRAP_OP_GENERATE_NONCE:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: GENERATE_NONCE\n");
+        // 0xa0 is the returned length in bits
+
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_NONCE_GENERATED, 0, 0xa0);
+        break;
+    case BOOTSTRAP_OP_GET_NONCE_WORD:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: GET_NONCE_WORD\n");
+        // param is the index (not offset), and needs to be returned
+
+        qemu_guest_getrandom(&randval, sizeof(randval), NULL);
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_NONCE_WORD_REPLY, msg->param,
+                                   randval);
         break;
     case BOOTSTRAP_OP_CHECK_TZ0:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: CHECK_TZ0\n");
@@ -528,6 +591,14 @@ static void apple_sep_sim_handle_bootstrap_msg(AppleSEPSimState *s,
         apple_sep_sim_advertise_eps(s);
         break;
     }
+    case BOOTSTRAP_OP_OPCODE_16:
+        qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: OPCODE_16\n");
+        // normally returns 0x20 random bytes, split in pieces by four bytes
+
+        qemu_guest_getrandom(&randval, sizeof(randval), NULL);
+        apple_sep_sim_send_message(s, EP_BOOTSTRAP, msg->tag,
+                                   BOOTSTRAP_OP_OPCODE_16_RESPONSE, 0, randval);
+        break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "EP_BOOTSTRAP: Unknown opcode %d\n",
                       msg->op);
@@ -551,10 +622,10 @@ static uint8_t *apple_sep_sim_gen_sks_hash(uint8_t *buf,
             .iov_len = msg_size - KEYSTORE_IPC_HEADER_SIZE,
         },
     };
-    g_assert_true(qcrypto_hash_supports(QCRYPTO_HASH_ALG_SHA256));
+    g_assert_true(qcrypto_hash_supports(QCRYPTO_HASH_ALGO_SHA256));
     uint8_t *hash = NULL;
     size_t hash_len = 0;
-    g_assert_cmpuint(qcrypto_hash_bytesv(QCRYPTO_HASH_ALG_SHA256, iov,
+    g_assert_cmpuint(qcrypto_hash_bytesv(QCRYPTO_HASH_ALGO_SHA256, iov,
                                          sizeof(iov) / sizeof(*iov), &hash,
                                          &hash_len, &error_fatal),
                      ==, 0);
@@ -594,7 +665,6 @@ static void apple_sep_sim_handle_keystore_msg(AppleSEPSimState *s,
     const KeystoreIPCHeader *msg_hdr = (KeystoreIPCHeader *)msg_buf;
 #if 0
     char fn[128];
-    memset(fn, 0, sizeof(fn));
     snprintf(fn, sizeof(fn), "/home/ios/SKSMessages/0x%02X_%lld.bin", msg_code,
              msg_hdr->time_msecs);
     g_file_set_contents(fn, (gchar *)msg_buf, msg->size, NULL);
@@ -631,8 +701,8 @@ static void apple_sep_sim_handle_keystore_msg(AppleSEPSimState *s,
         uint64_t *lword = (uint64_t *)(word0 + 1);
         uint32_t *word1 = (uint32_t *)(lword + 1);
         qemu_log_mask(LOG_GUEST_ERROR,
-                      "SEP KeyStore // Copy Keybag 0x%X 0x%" PRIx64 " 0x%X\n", *word0,
-                      *lword, *word1);
+                      "SEP KeyStore // Copy Keybag 0x%X 0x%" PRIx64 " 0x%X\n",
+                      *word0, *lword, *word1);
 
         const uint32_t resp_size = KEYSTORE_IPC_HEADER_SIZE + 0x4 + 0x4 + 0x10;
         uint8_t *resp_buf = g_new0(uint8_t, resp_size);
@@ -835,10 +905,10 @@ static void apple_sep_sim_handle_keystore_msg(AppleSEPSimState *s,
         uint64_t *lword = (uint64_t *)(word0 + 1);
         uint32_t *word1 = (uint32_t *)(lword + 1);
         uint32_t *word2 = (uint32_t *)(word1 + 1);
-        qemu_log_mask(
-            LOG_GUEST_ERROR,
-            "SEP KeyStore // Get Device State 0x%X 0x%" PRIx64 " 0x%X 0x%X\n", *word0,
-            *lword, *word1, *word2);
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "SEP KeyStore // Get Device State 0x%X 0x%" PRIx64
+                      " 0x%X 0x%X\n",
+                      *word0, *lword, *word1, *word2);
 
         const uint32_t resp_size = KEYSTORE_IPC_HEADER_SIZE + 0x4 + 0x4 + 0x8;
         uint8_t *resp_buf = g_new0(uint8_t, resp_size);
@@ -905,15 +975,12 @@ static void apple_sep_sim_handle_keystore_msg(AppleSEPSimState *s,
     g_free(msg_buf);
 }
 
-static void apple_sep_sim_bh(void *opaque)
+static void apple_sep_sim_handle_messages(void *opaque)
 {
-    AppleSEPSimState *s;
-    AppleA7IOP *a7iop;
+    AppleSEPSimState *s = opaque;
+    AppleA7IOP *a7iop = opaque;
     AppleA7IOPMessage *msg;
     SEPMessage *sep_msg;
-
-    s = APPLE_SEP_SIM(opaque);
-    a7iop = APPLE_A7IOP(opaque);
 
     QEMU_LOCK_GUARD(&s->lock);
 
@@ -966,32 +1033,32 @@ static void apple_sep_sim_bh(void *opaque)
     }
 }
 
-AppleSEPSimState *apple_sep_sim_create(DTBNode *node, bool modern)
+AppleSEPSimState *apple_sep_sim_from_node(AppleDTNode *node, bool modern)
 {
     DeviceState *dev;
     AppleA7IOP *a7iop;
     AppleSEPSimState *s;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
-    DTBNode *child;
+    AppleDTNode *child;
 
     dev = qdev_new(TYPE_APPLE_SEP_SIM);
     a7iop = APPLE_A7IOP(dev);
     s = APPLE_SEP_SIM(dev);
 
-    prop = find_dtb_prop(node, "reg");
+    prop = apple_dt_get_prop(node, "reg");
     g_assert_nonnull(prop);
-    reg = (uint64_t *)prop->value;
+    reg = (uint64_t *)prop->data;
 
     apple_a7iop_init(a7iop, "SEP", reg[1],
                      modern ? APPLE_A7IOP_V4 : APPLE_A7IOP_V2, NULL,
-                     qemu_bh_new(apple_sep_sim_bh, s));
+                     apple_sep_sim_handle_messages);
 
     qemu_mutex_init(&s->lock);
 
-    child = find_dtb_node(node, "iop-sep-nub");
+    child = apple_dt_get_node(node, "iop-sep-nub");
     g_assert_nonnull(child);
-    remove_dtb_node_by_name(child, "Lynx");
+    apple_dt_del_node_named(child, "Lynx");
     return s;
 }
 
@@ -1002,12 +1069,13 @@ static void apple_sep_sim_realize(DeviceState *dev, Error **errp)
 
     s = APPLE_SEP_SIM(dev);
     sc = APPLE_SEP_SIM_GET_CLASS(dev);
+
     if (sc->parent_realize) {
         sc->parent_realize(dev, errp);
     }
 }
 
-static void apple_sep_sim_reset(DeviceState *dev)
+static void apple_sep_sim_reset_hold(Object *obj, ResetType type)
 {
     AppleSEPSimState *s;
     AppleSEPSimClass *sc;
@@ -1016,11 +1084,12 @@ static void apple_sep_sim_reset(DeviceState *dev)
     AppleA7IOPMessage *msg;
     SEPMessage *sep_msg;
 
-    s = APPLE_SEP_SIM(dev);
-    sc = APPLE_SEP_SIM_GET_CLASS(dev);
-    a7iop = APPLE_A7IOP(dev);
-    if (sc->parent_reset) {
-        sc->parent_reset(dev);
+    s = APPLE_SEP_SIM(obj);
+    sc = APPLE_SEP_SIM_GET_CLASS(obj);
+    a7iop = APPLE_A7IOP(obj);
+
+    if (sc->parent_phases.hold != NULL) {
+        sc->parent_phases.hold(obj, type);
     }
 
     QEMU_LOCK_GUARD(&s->lock);
@@ -1030,8 +1099,7 @@ static void apple_sep_sim_reset(DeviceState *dev)
     a7iop->ap_mailbox->iop_dir_en = true;
     a7iop->ap_mailbox->ap_dir_en = true;
 
-    for (i = 0; i < (sizeof(apple_sep_sim_eps) / sizeof(*apple_sep_sim_eps));
-         i++) {
+    for (i = 0; i < ARRAY_SIZE(apple_sep_sim_eps); i++) {
         switch (apple_sep_sim_eps[i]) {
         case EP_LOGGER:
             s->ool_info[apple_sep_sim_eps[i]].in_max_pages = 0;
@@ -1073,14 +1141,18 @@ static void apple_sep_sim_reset(DeviceState *dev)
     apple_a7iop_send_ap(a7iop, msg);
 }
 
-static void apple_sep_sim_class_init(ObjectClass *klass, void *data)
+static void apple_sep_sim_class_init(ObjectClass *klass, const void *data)
 {
+    ResettableClass *rc = RESETTABLE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);
     AppleSEPSimClass *sc = APPLE_SEP_SIM_CLASS(klass);
+
+    resettable_class_set_parent_phases(rc, NULL, apple_sep_sim_reset_hold, NULL,
+                                       &sc->parent_phases);
+
     device_class_set_parent_realize(dc, apple_sep_sim_realize,
                                     &sc->parent_realize);
-    device_class_set_parent_reset(dc, apple_sep_sim_reset, &sc->parent_reset);
-    dc->desc = "Simulated Apple Secure Enclave";
+    dc->desc = "Simulated Apple Secure Enclave Processor";
     set_bit(DEVICE_CATEGORY_MISC, dc->categories);
 }
 

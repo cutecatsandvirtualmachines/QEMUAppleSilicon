@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Frequently Asked Questions
+    url: https://github.com/ChefKissInc/QEMUAppleSilicon/wiki/FAQ
+    about: Please make sure to read them before posting an issue or discussion.
+  - name: Discussions
+    url: https://github.com/ChefKissInc/QEMUAppleSilicon/discussions
+    about: Ask questions here, the issues are for bug reports or feature requests **only**.
+  - name: Telegram Supergroup
+    url: https://t.me/+Bx3MO9Hq8whhNzk9
+    about: Alternatively, you can write in the Telegram supergroup.

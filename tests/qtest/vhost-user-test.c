@@ -12,7 +12,7 @@
 
 #include "libqtest-single.h"
 #include "qapi/error.h"
-#include "qapi/qmp/qdict.h"
+#include "qobject/qdict.h"
 #include "qemu/config-file.h"
 #include "qemu/option.h"
 #include "qemu/range.h"
@@ -20,13 +20,12 @@
 #include "chardev/char-fe.h"
 #include "qemu/memfd.h"
 #include "qemu/module.h"
-#include "sysemu/sysemu.h"
+#include "system/system.h"
 #include "libqos/libqos.h"
 #include "libqos/pci-pc.h"
 #include "libqos/virtio-pci.h"
 
 #include "libqos/malloc-pc.h"
-#include "libqos/qgraph_internal.h"
 #include "hw/virtio/virtio-net.h"
 
 #include "standard-headers/linux/vhost_types.h"
@@ -43,6 +42,8 @@
 #define QEMU_CMD_MEM    " -m %d -object memory-backend-file,id=mem,size=%dM," \
                         "mem-path=%s,share=on -numa node,memdev=mem"
 #define QEMU_CMD_MEMFD  " -m %d -object memory-backend-memfd,id=mem,size=%dM," \
+                        " -numa node,memdev=mem"
+#define QEMU_CMD_SHM    " -m %d -object memory-backend-shm,id=mem,size=%dM," \
                         " -numa node,memdev=mem"
 #define QEMU_CMD_CHR    " -chardev socket,id=%s,path=%s%s"
 #define QEMU_CMD_NETDEV " -netdev vhost-user,id=hs0,chardev=%s,vhostforce=on"
@@ -195,6 +196,7 @@ enum test_memfd {
     TEST_MEMFD_AUTO,
     TEST_MEMFD_YES,
     TEST_MEMFD_NO,
+    TEST_MEMFD_SHM,
 };
 
 static void append_vhost_net_opts(TestServer *s, GString *cmd_line,
@@ -228,6 +230,8 @@ static void append_mem_opts(TestServer *server, GString *cmd_line,
 
     if (memfd == TEST_MEMFD_YES) {
         g_string_append_printf(cmd_line, QEMU_CMD_MEMFD, size, size);
+    } else if (memfd == TEST_MEMFD_SHM) {
+        g_string_append_printf(cmd_line, QEMU_CMD_SHM, size, size);
     } else {
         const char *root = init_hugepagefs() ? : server->tmpfs;
 
@@ -340,7 +344,7 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
     }
 
     if (size != VHOST_USER_HDR_SIZE) {
-        qos_printf("%s: Wrong message size received %d\n", __func__, size);
+        g_test_message("Wrong message size received %d", size);
         return;
     }
 
@@ -351,8 +355,8 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
         p += VHOST_USER_HDR_SIZE;
         size = qemu_chr_fe_read_all(chr, p, msg.size);
         if (size != msg.size) {
-            qos_printf("%s: Wrong message size received %d != %d\n",
-                       __func__, size, msg.size);
+            g_test_message("Wrong message size received %d != %d",
+                           size, msg.size);
             goto out;
         }
     }
@@ -388,7 +392,7 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
          * We don't need to do anything here, the remote is just
          * letting us know it is in charge. Just log it.
          */
-        qos_printf("set_owner: start of session\n");
+        g_test_message("set_owner: start of session\n");
         break;
 
     case VHOST_USER_GET_PROTOCOL_FEATURES:
@@ -414,7 +418,7 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
          * the remote end to send this. There is no handshake reply so
          * just log the details for debugging.
          */
-        qos_printf("set_protocol_features: 0x%"PRIx64 "\n", msg.payload.u64);
+        g_test_message("set_protocol_features: 0x%"PRIx64 "\n", msg.payload.u64);
         break;
 
         /*
@@ -422,11 +426,11 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
          * address of the vrings but we can simply report them.
          */
     case VHOST_USER_SET_VRING_NUM:
-        qos_printf("set_vring_num: %d/%d\n",
+        g_test_message("set_vring_num: %d/%d\n",
                    msg.payload.state.index, msg.payload.state.num);
         break;
     case VHOST_USER_SET_VRING_ADDR:
-        qos_printf("set_vring_addr: 0x%"PRIx64"/0x%"PRIx64"/0x%"PRIx64"\n",
+        g_test_message("set_vring_addr: 0x%"PRIx64"/0x%"PRIx64"/0x%"PRIx64"\n",
                    msg.payload.addr.avail_user_addr,
                    msg.payload.addr.desc_user_addr,
                    msg.payload.addr.used_user_addr);
@@ -458,7 +462,10 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
     case VHOST_USER_SET_VRING_KICK:
     case VHOST_USER_SET_VRING_CALL:
         /* consume the fd */
-        qemu_chr_fe_get_msgfds(chr, &fd, 1);
+        if (!qemu_chr_fe_get_msgfds(chr, &fd, 1) && fd < 0) {
+            g_test_message("call fd: %d, do not set non-blocking\n", fd);
+            break;
+        }
         /*
          * This is a non-blocking eventfd.
          * The receive function forces it to be blocking,
@@ -502,12 +509,12 @@ static void chr_read(void *opaque, const uint8_t *buf, int size)
          * fully functioning vhost-user we would enable/disable the
          * vring monitoring.
          */
-        qos_printf("set_vring(%d)=%s\n", msg.payload.state.index,
+        g_test_message("set_vring(%d)=%s\n", msg.payload.state.index,
                    msg.payload.state.num ? "enabled" : "disabled");
         break;
 
     default:
-        qos_printf("vhost-user: un-handled message: %d\n", msg.request);
+        g_test_message("vhost-user: un-handled message: %d\n", msg.request);
         break;
     }
 
@@ -531,7 +538,7 @@ static const char *init_hugepagefs(void)
     }
 
     if (access(path, R_OK | W_OK | X_OK)) {
-        qos_printf("access on path (%s): %s", path, strerror(errno));
+        g_test_message("access on path (%s): %s", path, strerror(errno));
         g_test_fail();
         return NULL;
     }
@@ -541,13 +548,13 @@ static const char *init_hugepagefs(void)
     } while (ret != 0 && errno == EINTR);
 
     if (ret != 0) {
-        qos_printf("statfs on path (%s): %s", path, strerror(errno));
+        g_test_message("statfs on path (%s): %s", path, strerror(errno));
         g_test_fail();
         return NULL;
     }
 
     if (fs.f_type != HUGETLBFS_MAGIC) {
-        qos_printf("Warning: path not on HugeTLBFS: %s", path);
+        g_test_message("Warning: path not on HugeTLBFS: %s", path);
         g_test_fail();
         return NULL;
     }
@@ -788,6 +795,19 @@ static void *vhost_user_test_setup_memfd(GString *cmd_line, void *arg)
     return server;
 }
 
+static void *vhost_user_test_setup_shm(GString *cmd_line, void *arg)
+{
+    TestServer *server = test_server_new("vhost-user-test", arg);
+    test_server_listen(server);
+
+    append_mem_opts(server, cmd_line, 256, TEST_MEMFD_SHM);
+    server->vu_ops->append_opts(server, cmd_line, "");
+
+    g_test_queue_destroy(vhost_user_test_cleanup, server);
+
+    return server;
+}
+
 static void test_read_guest_mem(void *obj, void *arg, QGuestAllocator *alloc)
 {
     TestServer *server = arg;
@@ -899,7 +919,7 @@ static void wait_for_rings_started(TestServer *s, size_t count)
 
 static inline void test_server_connect(TestServer *server)
 {
-    test_server_create_chr(server, ",reconnect=1");
+    test_server_create_chr(server, ",reconnect-ms=1000");
 }
 
 static gboolean
@@ -928,7 +948,7 @@ static void *vhost_user_test_setup_reconnect(GString *cmd_line, void *arg)
 {
     TestServer *s = test_server_new("reconnect", arg);
 
-    g_thread_new("connect", connect_thread, s);
+    g_thread_unref(g_thread_new("connect", connect_thread, s));
     append_mem_opts(s, cmd_line, 256, TEST_MEMFD_AUTO);
     s->vu_ops->append_opts(s, cmd_line, ",server=on");
 
@@ -965,7 +985,7 @@ static void *vhost_user_test_setup_connect_fail(GString *cmd_line, void *arg)
 
     s->test_fail = true;
 
-    g_thread_new("connect", connect_thread, s);
+    g_thread_unref(g_thread_new("connect", connect_thread, s));
     append_mem_opts(s, cmd_line, 256, TEST_MEMFD_AUTO);
     s->vu_ops->append_opts(s, cmd_line, ",server=on");
 
@@ -980,7 +1000,7 @@ static void *vhost_user_test_setup_flags_mismatch(GString *cmd_line, void *arg)
 
     s->test_flags = TEST_FLAGS_DISCONNECT;
 
-    g_thread_new("connect", connect_thread, s);
+    g_thread_unref(g_thread_new("connect", connect_thread, s));
     append_mem_opts(s, cmd_line, 256, TEST_MEMFD_AUTO);
     s->vu_ops->append_opts(s, cmd_line, ",server=on");
 
@@ -1022,7 +1042,8 @@ static void test_multiqueue(void *obj, void *arg, QGuestAllocator *alloc)
 
 static uint64_t vu_net_get_features(TestServer *s)
 {
-    uint64_t features = 0x1ULL << VHOST_F_LOG_ALL |
+    uint64_t features = 0x1ULL << VIRTIO_F_VERSION_1 |
+        0x1ULL << VHOST_F_LOG_ALL |
         0x1ULL << VHOST_USER_F_PROTOCOL_FEATURES;
 
     if (s->queues > 1) {
@@ -1078,6 +1099,11 @@ static void register_vhost_user_test(void)
     qemu_add_opts(&qemu_chardev_opts);
 
     qos_add_test("vhost-user/read-guest-mem/memfile",
+                 "virtio-net",
+                 test_read_guest_mem, &opts);
+
+    opts.before = vhost_user_test_setup_shm;
+    qos_add_test("vhost-user/read-guest-mem/shm",
                  "virtio-net",
                  test_read_guest_mem, &opts);
 

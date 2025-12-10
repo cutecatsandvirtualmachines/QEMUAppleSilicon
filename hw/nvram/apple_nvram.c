@@ -1,10 +1,9 @@
 #include "qemu/osdep.h"
-#include <zlib.h>
 #include "hw/nvram/apple_nvram.h"
-#include "libdecnumber/decNumberLocal.h"
 #include "qapi/error.h"
 #include "qemu/error-report.h"
-#include "sysemu/block-backend.h"
+#include "system/block-backend.h"
+#include <zlib.h>
 
 static inline uint8_t chrp_checksum(ChrpNvramPartHdr *header)
 {
@@ -280,7 +279,7 @@ static int nvram_prepare_bank(NvramBank *bank, void **buffer, size_t *len)
 
         hdr = (ChrpNvramPartHdr *)(buf + offset);
         hdr->signature = part->sig;
-        hdr->len = ROUNDUP(part->len + 0x10, 0x10) / 0x10;
+        hdr->len = ROUND_UP(part->len + 0x10, 0x10) / 0x10;
         memcpy(hdr->name, part->name, sizeof(hdr->name));
         hdr->checksum = chrp_checksum(hdr);
 
@@ -493,7 +492,7 @@ static void apple_nvram_unrealize(DeviceState *dev)
     apple_nvram_cleanup(s);
 }
 
-static void apple_nvram_class_init(ObjectClass *klass, void *data)
+static void apple_nvram_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     AppleNvramClass *anc = APPLE_NVRAM_CLASS(klass);

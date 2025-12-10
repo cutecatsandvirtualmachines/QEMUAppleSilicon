@@ -22,15 +22,14 @@ check-system-alpine:
     IMAGE: alpine
     MAKE_CHECK_ARGS: check-unit check-qtest
 
-avocado-system-alpine:
-  extends: .avocado_test_job_template
+functional-system-alpine:
+  extends: .functional_test_job_template
   needs:
     - job: build-system-alpine
       artifacts: true
   variables:
     IMAGE: alpine
-    MAKE_CHECK_ARGS: check-avocado
-    AVOCADO_TAGS: arch:avr arch:loongarch64 arch:mips64 arch:mipsel
+    MAKE_CHECK_ARGS: check-functional
 
 build-system-ubuntu:
   extends:
@@ -40,9 +39,9 @@ build-system-ubuntu:
     job: amd64-ubuntu2204-container
   variables:
     IMAGE: ubuntu2204
-    CONFIGURE_ARGS: --enable-docs
+    CONFIGURE_ARGS: --enable-docs --enable-rust
     TARGETS: alpha-softmmu microblazeel-softmmu mips64el-softmmu
-    MAKE_CHECK_ARGS: check-build
+    MAKE_CHECK_ARGS: check-build check-doc
 
 check-system-ubuntu:
   extends: .native_test_job_template
@@ -53,15 +52,14 @@ check-system-ubuntu:
     IMAGE: ubuntu2204
     MAKE_CHECK_ARGS: check
 
-avocado-system-ubuntu:
-  extends: .avocado_test_job_template
+functional-system-ubuntu:
+  extends: .functional_test_job_template
   needs:
     - job: build-system-ubuntu
       artifacts: true
   variables:
     IMAGE: ubuntu2204
-    MAKE_CHECK_ARGS: check-avocado
-    AVOCADO_TAGS: arch:alpha arch:microblazeel arch:mips64el
+    MAKE_CHECK_ARGS: check-functional
 
 build-system-debian:
   extends:
@@ -71,7 +69,7 @@ build-system-debian:
     job: amd64-debian-container
   variables:
     IMAGE: debian
-    CONFIGURE_ARGS: --with-coroutine=sigaltstack
+    CONFIGURE_ARGS: --with-coroutine=sigaltstack --enable-rust
     TARGETS: arm-softmmu i386-softmmu riscv64-softmmu sh4eb-softmmu
       sparc-softmmu xtensa-softmmu
     MAKE_CHECK_ARGS: check-build
@@ -85,15 +83,14 @@ check-system-debian:
     IMAGE: debian
     MAKE_CHECK_ARGS: check
 
-avocado-system-debian:
-  extends: .avocado_test_job_template
+functional-system-debian:
+  extends: .functional_test_job_template
   needs:
     - job: build-system-debian
       artifacts: true
   variables:
     IMAGE: debian
-    MAKE_CHECK_ARGS: check-avocado
-    AVOCADO_TAGS: arch:arm arch:i386 arch:riscv64 arch:sh4 arch:sparc arch:xtensa
+    MAKE_CHECK_ARGS: check-functional
 
 crash-test-debian:
   extends: .native_test_job_template
@@ -115,10 +112,24 @@ build-system-fedora:
     job: amd64-fedora-container
   variables:
     IMAGE: fedora
-    CONFIGURE_ARGS: --disable-gcrypt --enable-nettle --enable-docs
+    CONFIGURE_ARGS: --disable-gcrypt --enable-nettle --enable-docs --enable-crypto-afalg --enable-rust
     TARGETS: microblaze-softmmu mips-softmmu
       xtensa-softmmu m68k-softmmu riscv32-softmmu ppc-softmmu sparc64-softmmu
-    MAKE_CHECK_ARGS: check-build
+    MAKE_CHECK_ARGS: check-build check-doc
+
+build-system-fedora-rust-nightly:
+  extends:
+    - .native_build_job_template
+    - .native_build_artifact_template
+  needs:
+    job: amd64-fedora-rust-nightly-container
+  variables:
+    IMAGE: fedora-rust-nightly
+    CONFIGURE_ARGS: --disable-docs --enable-rust --enable-strict-rust-lints
+    TARGETS: aarch64-softmmu
+    MAKE_CHECK_ARGS: check-build check-doc
+
+  allow_failure: true
 
 check-system-fedora:
   extends: .native_test_job_template
@@ -129,16 +140,14 @@ check-system-fedora:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-avocado-system-fedora:
-  extends: .avocado_test_job_template
+functional-system-fedora:
+  extends: .functional_test_job_template
   needs:
     - job: build-system-fedora
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-avocado
-    AVOCADO_TAGS: arch:microblaze arch:mips arch:xtensa arch:m68k
-      arch:riscv32 arch:ppc arch:sparc64
+    MAKE_CHECK_ARGS: check-functional
 
 crash-test-fedora:
   extends: .native_test_job_template
@@ -164,7 +173,7 @@ build-system-centos:
     CONFIGURE_ARGS: --disable-nettle --enable-gcrypt --enable-vfio-user-server
       --enable-modules --enable-trace-backends=dtrace --enable-docs
     TARGETS: ppc64-softmmu or1k-softmmu s390x-softmmu
-      x86_64-softmmu rx-softmmu sh4-softmmu nios2-softmmu
+      x86_64-softmmu rx-softmmu sh4-softmmu
     MAKE_CHECK_ARGS: check-build
 
 # Previous QEMU release. Used for cross-version migration tests.
@@ -174,14 +183,11 @@ build-previous-qemu:
     when: on_success
     expire_in: 2 days
     paths:
-      - build-previous
-    exclude:
-      - build-previous/**/*.p
-      - build-previous/**/*.a.p
-      - build-previous/**/*.fa.p
-      - build-previous/**/*.c.o
-      - build-previous/**/*.c.o.d
-      - build-previous/**/*.fa
+      - build-previous/qemu-bundle
+      - build-previous/qemu-system-aarch64
+      - build-previous/qemu-system-x86_64
+      - build-previous/tests/qtest/migration-test
+      - build-previous/scripts
   needs:
     job: amd64-opensuse-leap-container
   variables:
@@ -190,6 +196,12 @@ build-previous-qemu:
     # Override the default flags as we need more to grab the old version
     GIT_FETCH_EXTRA_FLAGS: --prune --quiet
   before_script:
+    - source scripts/ci/gitlab-ci-section
+    # Skip if this series contains the release bump commit. During the
+    # release process there might be a window of commits when the
+    # version tag is not yet present in the remote and git fetch would
+    # fail.
+    - if grep -q "\.0$" VERSION; then exit 0; fi
     - export QEMU_PREV_VERSION="$(sed 's/\([0-9.]*\)\.[0-9]*/v\1.0/' VERSION)"
     - git remote add upstream https://gitlab.com/qemu-project/qemu
     - git fetch upstream refs/tags/$QEMU_PREV_VERSION:refs/tags/$QEMU_PREV_VERSION
@@ -210,6 +222,9 @@ build-previous-qemu:
     IMAGE: opensuse-leap
     MAKE_CHECK_ARGS: check-build
   script:
+    # Skip for round release numbers, this job is only relevant for
+    # testing a development tree.
+    - if grep -q "\.0$" VERSION; then exit 0; fi
     # Use the migration-tests from the older QEMU tree. This avoids
     # testing an old QEMU against new features/tests that it is not
     # compatible with.
@@ -245,16 +260,14 @@ check-system-centos:
     IMAGE: centos9
     MAKE_CHECK_ARGS: check
 
-avocado-system-centos:
-  extends: .avocado_test_job_template
+functional-system-centos:
+  extends: .functional_test_job_template
   needs:
     - job: build-system-centos
       artifacts: true
   variables:
     IMAGE: centos9
-    MAKE_CHECK_ARGS: check-avocado
-    AVOCADO_TAGS: arch:ppc64 arch:or1k arch:s390x arch:x86_64 arch:rx
-      arch:sh4 arch:nios2
+    MAKE_CHECK_ARGS: check-functional
 
 build-system-opensuse:
   extends:
@@ -276,15 +289,14 @@ check-system-opensuse:
     IMAGE: opensuse-leap
     MAKE_CHECK_ARGS: check
 
-avocado-system-opensuse:
-  extends: .avocado_test_job_template
+functional-system-opensuse:
+  extends: .functional_test_job_template
   needs:
     - job: build-system-opensuse
       artifacts: true
   variables:
     IMAGE: opensuse-leap
-    MAKE_CHECK_ARGS: check-avocado
-    AVOCADO_TAGS: arch:s390x arch:x86_64 arch:aarch64
+    MAKE_CHECK_ARGS: check-functional
 
 #
 # Flaky tests. We don't run these by default and they are allow fail
@@ -304,18 +316,17 @@ build-system-flaky:
       ppc64-softmmu rx-softmmu s390x-softmmu sh4-softmmu x86_64-softmmu
     MAKE_CHECK_ARGS: check-build
 
-avocado-system-flaky:
-  extends: .avocado_test_job_template
+functional-system-flaky:
+  extends: .functional_test_job_template
   needs:
     - job: build-system-flaky
       artifacts: true
   allow_failure: true
   variables:
     IMAGE: debian
-    MAKE_CHECK_ARGS: check-avocado
+    MAKE_CHECK_ARGS: check-functional
     QEMU_JOB_OPTIONAL: 1
     QEMU_TEST_FLAKY_TESTS: 1
-    AVOCADO_TAGS: flaky
 
 # This jobs explicitly disable TCG (--disable-tcg), KVM is detected by
 # the configure script. The container doesn't contain Xen headers so
@@ -342,11 +353,13 @@ build-tcg-disabled:
     - cd tests/qemu-iotests/
     - ./check -raw 001 002 003 004 005 008 009 010 011 012 021 025 032 033 048
             052 063 077 086 101 104 106 113 148 150 151 152 157 159 160 163
-            170 171 183 184 192 194 208 221 226 227 236 253 277 image-fleecing
+            170 171 184 192 194 208 221 226 227 236 253 277 image-fleecing
     - ./check -qcow2 028 051 056 057 058 065 068 082 085 091 095 096 102 122
             124 132 139 142 144 145 151 152 155 157 165 194 196 200 202
             208 209 216 218 227 234 246 247 248 250 254 255 257 258
             260 261 262 263 264 270 272 273 277 279 image-fleecing
+    - cd ../..
+    - make distclean
 
 build-user:
   extends: .native_build_job_template
@@ -430,8 +443,8 @@ clang-system:
     job: amd64-fedora-container
   variables:
     IMAGE: fedora
-    CONFIGURE_ARGS: --cc=clang --cxx=clang++
-      --extra-cflags=-fsanitize=undefined --extra-cflags=-fno-sanitize-recover=undefined
+    CONFIGURE_ARGS: --cc=clang --cxx=clang++ --enable-ubsan
+      --extra-cflags=-fno-sanitize-recover=undefined
     TARGETS: alpha-softmmu arm-softmmu m68k-softmmu mips64-softmmu s390x-softmmu
     MAKE_CHECK_ARGS: check-qtest check-tcg
 
@@ -442,9 +455,9 @@ clang-user:
   timeout: 70m
   variables:
     IMAGE: debian-all-test-cross
-    CONFIGURE_ARGS: --cc=clang --cxx=clang++ --disable-system
+    CONFIGURE_ARGS: --cc=clang --cxx=clang++ --disable-system --enable-ubsan
       --target-list-exclude=alpha-linux-user,microblazeel-linux-user,aarch64_be-linux-user,i386-linux-user,m68k-linux-user,mipsn32el-linux-user,xtensaeb-linux-user
-      --extra-cflags=-fsanitize=undefined --extra-cflags=-fno-sanitize-recover=undefined
+      --extra-cflags=-fno-sanitize-recover=undefined
     MAKE_CHECK_ARGS: check-unit check-tcg
 
 # Set LD_JOBS=1 because this requires LTO and ld consumes a large amount of memory.
@@ -454,8 +467,8 @@ clang-user:
 # Since slirp callbacks are used in QEMU Timers, we cannot use libslirp with
 # CFI builds, and thus have to disable it here.
 #
-# Split in three sets of build/check/avocado to limit the execution time of each
-# job
+# Split in three sets of build/check/functional to limit the execution time
+# of each job
 build-cfi-aarch64:
   extends:
     - .native_build_job_template
@@ -485,14 +498,14 @@ check-cfi-aarch64:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-avocado-cfi-aarch64:
-  extends: .avocado_test_job_template
+functional-cfi-aarch64:
+  extends: .functional_test_job_template
   needs:
     - job: build-cfi-aarch64
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-avocado
+    MAKE_CHECK_ARGS: check-functional
 
 build-cfi-ppc64-s390x:
   extends:
@@ -523,14 +536,14 @@ check-cfi-ppc64-s390x:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-avocado-cfi-ppc64-s390x:
-  extends: .avocado_test_job_template
+functional-cfi-ppc64-s390x:
+  extends: .functional_test_job_template
   needs:
     - job: build-cfi-ppc64-s390x
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-avocado
+    MAKE_CHECK_ARGS: check-functional
 
 build-cfi-x86_64:
   extends:
@@ -557,14 +570,14 @@ check-cfi-x86_64:
     IMAGE: fedora
     MAKE_CHECK_ARGS: check
 
-avocado-cfi-x86_64:
-  extends: .avocado_test_job_template
+functional-cfi-x86_64:
+  extends: .functional_test_job_template
   needs:
     - job: build-cfi-x86_64
       artifacts: true
   variables:
     IMAGE: fedora
-    MAKE_CHECK_ARGS: check-avocado
+    MAKE_CHECK_ARGS: check-functional
 
 tsan-build:
   extends: .native_build_job_template
@@ -619,12 +632,15 @@ build-oss-fuzz:
     - CC="clang" CXX="clang++" CFLAGS="-fsanitize=address"
       ./scripts/oss-fuzz/build.sh
     - export ASAN_OPTIONS="fast_unwind_on_malloc=0"
+    - failures=0
     - for fuzzer in $(find ./build-oss-fuzz/DEST_DIR/ -executable -type f
                       | grep -v slirp); do
         grep "LLVMFuzzerTestOneInput" ${fuzzer} > /dev/null 2>&1 || continue ;
         echo Testing ${fuzzer} ... ;
-        "${fuzzer}" -runs=1 -seed=1 || exit 1 ;
+        "${fuzzer}" -runs=1 -seed=1 || { echo "FAILED:"" ${fuzzer} exit code is $?"; failures=$(($failures+1)); };
       done
+    - echo "Number of failures:"" $failures"
+    - test $failures = 0
 
 build-tci:
   extends: .native_build_job_template
@@ -636,7 +652,7 @@ build-tci:
     - TARGETS="aarch64 arm hppa m68k microblaze ppc64 s390x x86_64"
     - mkdir build
     - cd build
-    - ../configure --enable-tcg-interpreter --disable-docs --disable-gtk --disable-vnc
+    - ../configure --enable-tcg-interpreter --disable-kvm --disable-docs --disable-gtk --disable-vnc
         --target-list="$(for tg in $TARGETS; do echo -n ${tg}'-softmmu '; done)"
         || { cat config.log meson-logs/meson-log.txt && exit 1; }
     - make -j"$JOBS"
@@ -664,8 +680,7 @@ build-without-defaults:
       --disable-pie
       --disable-qom-cast-debug
       --disable-strip
-    TARGETS: avr-softmmu s390x-softmmu sh4-softmmu
-      sparc64-softmmu hexagon-linux-user i386-linux-user s390x-linux-user
+      --target-list-exclude=aarch64-softmmu,microblaze-softmmu,mips64-softmmu,mipsel-softmmu,ppc64-softmmu,sh4el-softmmu,xtensa-softmmu,x86_64-softmmu
     MAKE_CHECK_ARGS: check
 
 build-libvhost-user:
@@ -721,7 +736,7 @@ pages:
     - make gtags
     # We unset variables to work around a bug in some htags versions
     # which causes it to fail when the environment is large
-    - CI_COMMIT_MESSAGE= CI_COMMIT_TAG_MESSAGE= htags
+    - CI_COMMIT_MESSAGE= CI_COMMIT_TAG_MESSAGE= CI_COMMIT_DESCRIPTION= htags
         -anT --tree-view=filetree -m qemu_init
         -t "Welcome to the QEMU sourcecode"
     - mv HTML public/src
@@ -771,3 +786,12 @@ coverity:
       when: never
     # Always manual on forks even if $QEMU_CI == "2"
     - when: manual
+
+build-wasm:
+  extends: .wasm_build_job_template
+  timeout: 2h
+  needs:
+    job: wasm-emsdk-cross-container
+  variables:
+    IMAGE: emsdk-wasm32-cross
+    CONFIGURE_ARGS: --static --disable-tools --enable-debug --enable-tcg-interpreter

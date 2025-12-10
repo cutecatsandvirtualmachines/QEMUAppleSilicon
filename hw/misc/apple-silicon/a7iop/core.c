@@ -5,8 +5,6 @@
 #include "qemu/bitops.h"
 #include "qemu/lockable.h"
 
-#define CPU_CTRL_RUN BIT(4)
-
 void apple_a7iop_send_ap(AppleA7IOP *s, AppleA7IOPMessage *msg)
 {
     apple_a7iop_mailbox_send_ap(s->iop_mailbox, msg);
@@ -29,15 +27,25 @@ AppleA7IOPMessage *apple_a7iop_recv_iop(AppleA7IOP *s)
 
 void apple_a7iop_cpu_start(AppleA7IOP *s, bool wake)
 {
+    // Already awake - do nothing.
+    // Skip check if Secure Enclave Processor.
+    if ((apple_a7iop_get_cpu_ctrl(s) & SEP_BOOT_MONITOR_RUN) == 0 &&
+        (apple_a7iop_get_cpu_status(s) & CPU_STATUS_IDLE) == 0) {
+        return;
+    }
+
+    apple_a7iop_set_cpu_status(s, apple_a7iop_get_cpu_status(s) &
+                                      ~CPU_STATUS_IDLE);
+
     if (s->ops == NULL) {
         return;
     }
 
     if (wake) {
-        if (s->ops->wakeup) {
+        if (s->ops->wakeup != NULL) {
             s->ops->wakeup(s);
         }
-    } else if (s->ops->start) {
+    } else if (s->ops->start != NULL) {
         s->ops->start(s);
     }
 }
@@ -66,14 +74,14 @@ void apple_a7iop_set_cpu_ctrl(AppleA7IOP *s, uint32_t value)
     {
         s->cpu_ctrl = value;
     }
-    if (value & CPU_CTRL_RUN) {
+    if ((value & (CPU_CTRL_RUN | SEP_BOOT_MONITOR_RUN)) != 0) {
         apple_a7iop_cpu_start(s, false);
     }
 }
 
 void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
                       AppleA7IOPVersion version, const AppleA7IOPOps *ops,
-                      QEMUBH *iop_bh)
+                      QEMUBHFunc *handle_messages_func)
 {
     DeviceState *dev;
     SysBusDevice *sbd;
@@ -88,13 +96,14 @@ void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
     qemu_mutex_init(&s->lock);
 
     snprintf(name, sizeof(name), "%s-iop", s->role);
-    s->iop_mailbox = apple_a7iop_mailbox_new(name, version, NULL, NULL, iop_bh);
+    s->iop_mailbox = apple_a7iop_mailbox_new(name, version, NULL, NULL, s,
+                                             handle_messages_func);
     object_property_add_child(OBJECT(dev), "iop-mailbox",
                               OBJECT(s->iop_mailbox));
 
     snprintf(name, sizeof(name), "%s-ap", s->role);
-    s->ap_mailbox =
-        apple_a7iop_mailbox_new(name, version, s->iop_mailbox, NULL, NULL);
+    s->ap_mailbox = apple_a7iop_mailbox_new(name, version, s->iop_mailbox, NULL,
+                                            NULL, NULL);
     s->iop_mailbox->ap_mailbox = s->ap_mailbox;
     object_property_add_child(OBJECT(dev), "ap-mailbox", OBJECT(s->ap_mailbox));
 
@@ -106,11 +115,10 @@ void apple_a7iop_init(AppleA7IOP *s, const char *role, uint64_t mmio_size,
         apple_a7iop_init_mmio_v4(s, mmio_size);
         break;
     }
-    s->version = version;
 
     sysbus_pass_irq(sbd, SYS_BUS_DEVICE(s->ap_mailbox));
 
-    //qdev_init_gpio_out_named(dev, &s->iop_irq, APPLE_A7IOP_IOP_IRQ, 1);
+    // qdev_init_gpio_out_named(dev, &s->iop_irq, APPLE_A7IOP_IOP_IRQ, 1);
 }
 
 static void apple_a7iop_reset(DeviceState *opaque)
@@ -120,7 +128,7 @@ static void apple_a7iop_reset(DeviceState *opaque)
     s = APPLE_A7IOP(opaque);
 
     QEMU_LOCK_GUARD(&s->lock);
-    s->cpu_status = 0x00000000;
+    s->cpu_status = CPU_STATUS_IDLE;
 }
 
 static void apple_a7iop_realize(DeviceState *opaque, Error **errp)
@@ -143,12 +151,13 @@ static void apple_a7iop_unrealize(DeviceState *opaque)
     qdev_unrealize(DEVICE(s->ap_mailbox));
 }
 
-static void apple_a7iop_class_init(ObjectClass *oc, void *data)
+static void apple_a7iop_class_init(ObjectClass *oc, const void *data)
 {
     DeviceClass *dc;
 
     dc = DEVICE_CLASS(oc);
-    dc->reset = apple_a7iop_reset;
+
+    device_class_set_legacy_reset(dc, apple_a7iop_reset);
     dc->realize = apple_a7iop_realize;
     dc->unrealize = apple_a7iop_unrealize;
     dc->desc = "Apple A7IOP";
@@ -168,3 +177,15 @@ static void apple_a7iop_register_types(void)
 }
 
 type_init(apple_a7iop_register_types);
+
+const VMStateDescription vmstate_apple_a7iop = {
+    .name = "AppleA7IOP",
+    .version_id = 0,
+    .minimum_version_id = 0,
+    .fields =
+        (const VMStateField[]){
+            VMSTATE_UINT32(cpu_status, AppleA7IOP),
+            VMSTATE_UINT32(cpu_ctrl, AppleA7IOP),
+            VMSTATE_END_OF_LIST(),
+        },
+};

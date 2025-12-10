@@ -1,13 +1,13 @@
 #ifndef APPLE_OTG_H
 #define APPLE_OTG_H
 
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/sysbus.h"
 #include "hw/usb/hcd-dwc2.h"
 #include "hw/usb/hcd-tcp.h"
 #include "qom/object.h"
 
-#define TYPE_APPLE_OTG "apple.otg"
+#define TYPE_APPLE_OTG "apple-otg"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleOTGState, APPLE_OTG)
 
 struct AppleOTGState {
@@ -23,13 +23,10 @@ struct AppleOTGState {
     MemoryRegion *dma_mr;
     DWC2State dwc2;
     uint64_t high_addr;
-    union {
-        struct USBTCPHostState usbtcp;
-        DeviceState usbhcd;
-    };
+    SysBusDevice *host;
     char *fuzz_input;
     bool dart;
 };
 
-DeviceState *apple_otg_create(DTBNode *node);
+DeviceState *apple_otg_from_node(AppleDTNode *node);
 #endif

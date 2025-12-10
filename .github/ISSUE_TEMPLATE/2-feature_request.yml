@@ -1,0 +1,50 @@
+name: Feature Request
+description: Request a new feature be added to QEMUAppleSilicon
+type: "Feature"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # This form is not for asking questions, requesting time estimates, asking for help or similar. The Discussions tab or the Telegram supergroup are better suited for those.
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: On which OS is the feature missing? You must include the version too.
+    validations:
+      required: true
+  - type: input
+    id: cpu
+    attributes:
+      label: What is your CPU's model?
+      placeholder: ex. Apple M4
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the feature in detail.
+      placeholder: I want QEMUAppleSilicon to be able to do Y.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Have you tried any alternatives? If so, what are they?
+      placeholder: I used X to work around the lack of the feature.
+    validations:
+      required: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Feature Request Terms
+      description: By submitting this feature request, you agree to the following terms
+      options:
+        - label: You have made sure that there are no other requests about this feature.
+          required: true
+        - label: You do not use any software that might interfere with correct function of this software. For Hackintosh users, that could be OCLP, WEG, etc.
+          required: true
+        - label: You are on the latest commit of the emulator.
+          required: true
+        - label: You acknowledge that violation of these terms may result in your issue being closed or you getting blocked from the organisation.
+          required: true

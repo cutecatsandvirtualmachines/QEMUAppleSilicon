@@ -1,10 +1,44 @@
+/*
+ * Apple General-Purpose Input/Output.
+ *
+ * Copyright (c) 2024-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/gpio/apple_gpio.h"
 #include "hw/irq.h"
+#include "migration/vmstate.h"
+#include "qapi/error.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
+
+#if 0
+#define DPRINTF(fmt, ...) fprintf(stderr, fmt "\n", __VA_ARGS__)
+#else
+#define DPRINTF(fmt, ...) \
+    do {                  \
+    } while (0);
+#endif
 
 #define GPIO_MAX_PIN_NR (512)
 #define GPIO_MAX_INT_GRP_NR (0x7)
@@ -77,26 +111,25 @@ static void apple_gpio_update_pincfg(AppleGPIOState *s, int pin, uint32_t value)
     if ((value & INT_MASKED) != INT_MASKED) {
         int irqgrp = (value & INT_MASKED) >> INTR_GRP_SHIFT;
 
-        clear_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+        clear_bit32(pin, &s->int_config[irqgrp * s->pin_count]);
 
         switch (value & CFG_MASK) {
         case CFG_INT_LVL_HI:
-            if (test_bit(pin, (unsigned long *)s->in)) {
-                set_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+            if (test_bit32(pin, s->in)) {
+                set_bit32_atomic(pin, &s->int_config[irqgrp * s->pin_count]);
             }
             break;
-
         case CFG_INT_LVL_LO:
-            if (!test_bit(pin, (unsigned long *)s->in)) {
-                set_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+            if (!test_bit32(pin, s->in)) {
+                set_bit32_atomic(pin, &s->int_config[irqgrp * s->pin_count]);
             }
             break;
         default:
             break;
         }
         qemu_set_irq(s->irqs[irqgrp],
-                     find_first_bit((unsigned long *)s->int_cfg[irqgrp],
-                                    s->npins) != s->npins);
+                     find_first_bit32(&s->int_config[irqgrp * s->pin_count],
+                                      s->pin_count) != s->pin_count);
     }
 
     s->gpio_cfg[pin] = value;
@@ -106,6 +139,9 @@ static void apple_gpio_update_pincfg(AppleGPIOState *s, int pin, uint32_t value)
         // Visual: Not sure, but here's some more logic :^)
         switch (value & FUNC_MASK) {
         case FUNC_ALT0:
+            if ((value & CFG_MASK) == CFG_DISABLE) {
+                break;
+            }
             if ((value & CFG_MASK) == CFG_GP_OUT) {
                 s->gpio_cfg[pin] &= ~DATA_1;
             } else {
@@ -131,19 +167,19 @@ static void apple_gpio_update_pincfg(AppleGPIOState *s, int pin, uint32_t value)
 
 static void apple_gpio_set(void *opaque, int pin, int level)
 {
-    AppleGPIOState *s = APPLE_GPIO(opaque);
+    AppleGPIOState *s = opaque;
     int grp;
     int irqgrp = -1;
 
-    if (pin >= s->npins) {
+    if (pin >= s->pin_count) {
         return;
     }
 
     level = level != 0;
     if (level) {
-        set_bit(pin, (unsigned long *)s->in);
+        set_bit32_atomic(pin, s->in);
     } else {
-        clear_bit(pin, (unsigned long *)s->in);
+        clear_bit32_atomic(pin, s->in);
     }
 
     grp = pin >> 5;
@@ -157,31 +193,31 @@ static void apple_gpio_set(void *opaque, int pin, int level)
 
         case CFG_INT_LVL_HI:
             if (level) {
-                set_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+                set_bit32_atomic(pin, &s->int_config[irqgrp * s->pin_count]);
             }
             break;
 
         case CFG_INT_LVL_LO:
             if (!level) {
-                set_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+                set_bit32_atomic(pin, &s->int_config[irqgrp * s->pin_count]);
             }
             break;
 
         case CFG_INT_EDG_RIS:
-            if (test_bit(pin, (unsigned long *)s->old_in) == 0 && level) {
-                set_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+            if (test_bit32(pin, s->in_old) == 0 && level) {
+                set_bit32_atomic(pin, &s->int_config[irqgrp * s->pin_count]);
             }
             break;
 
         case CFG_INT_EDG_FAL:
-            if (test_bit(pin, (unsigned long *)s->old_in) && !level) {
-                set_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+            if (test_bit32(pin, s->in_old) && !level) {
+                set_bit32_atomic(pin, &s->int_config[irqgrp * s->pin_count]);
             }
             break;
 
         case CFG_INT_EDG_ANY:
-            if (test_bit(pin, (unsigned long *)s->old_in) != level) {
-                set_bit(pin, (unsigned long *)s->int_cfg[irqgrp]);
+            if (test_bit32(pin, s->in_old) != level) {
+                set_bit32_atomic(pin, &s->int_config[irqgrp * s->pin_count]);
             }
             break;
 
@@ -190,29 +226,17 @@ static void apple_gpio_set(void *opaque, int pin, int level)
         }
     }
 
-    s->old_in[grp] = s->in[grp];
+    s->in_old[grp] = s->in[grp];
 
     if (irqgrp != -1) {
         qemu_set_irq(s->irqs[irqgrp],
-                     find_first_bit((unsigned long *)s->int_cfg[irqgrp],
-                                    s->npins) != s->npins);
+                     find_first_bit32(&s->int_config[irqgrp * s->pin_count],
+                                      s->pin_count) != s->pin_count);
     }
 }
 
 static void apple_gpio_realize(DeviceState *dev, Error **errp)
 {
-    int i;
-    AppleGPIOState *s = APPLE_GPIO(dev);
-
-    s->gpio_cfg = g_new0(uint32_t, s->npins);
-    s->int_cfg = g_new0(uint32_t *, s->nirqgrps);
-
-    for (i = 0; i < s->nirqgrps; i++) {
-        s->int_cfg[i] = g_new0(uint32_t, s->npins);
-    }
-
-    s->old_in = g_new0(uint32_t, (s->npins + 63) >> 5);
-    s->in = g_new0(uint32_t, (s->npins + 63) >> 5);
 }
 
 static void apple_gpio_reset(DeviceState *dev)
@@ -220,22 +244,24 @@ static void apple_gpio_reset(DeviceState *dev)
     int i;
     AppleGPIOState *s = APPLE_GPIO(dev);
 
-    for (i = 0; i < s->npins; i++) {
+    for (i = 0; i < s->pin_count; i++) {
         s->gpio_cfg[i] = CFG_DISABLED;
     }
 
-    for (i = 0; i < s->nirqgrps; i++) {
-        memset(s->int_cfg[i], 0, 4 * s->npins);
-    }
-
-    memset(s->old_in, 0, 4 * ((s->npins + 31) >> 5));
-    memset(s->in, 0, 4 * ((s->npins + 31) >> 5));
+    memset(s->int_config, 0,
+           sizeof(*s->int_config) * s->pin_count * s->irq_group_count);
+    memset(s->in_old, 0, sizeof(*s->in_old) * s->in_len);
+    memset(s->in, 0, sizeof(*s->in_old) * s->in_len);
 }
 
 static void apple_gpio_cfg_write(AppleGPIOState *s, unsigned int pin,
                                  hwaddr addr, uint32_t value)
 {
-    if (pin >= s->npins) {
+    DPRINTF("%s: WRITE addr 0x" HWADDR_FMT_plx " value 0x" HWADDR_FMT_plx
+            " pin %d/0x%x\n",
+            __func__, addr, value, pin, pin);
+
+    if (pin >= s->pin_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
                       __func__, addr);
         return;
@@ -249,7 +275,10 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
 {
     uint32_t val;
 
-    if (pin >= s->npins) {
+    DPRINTF("%s: READ 0x" HWADDR_FMT_plx " pin %d/0x%x\n", __func__, addr, pin,
+            pin);
+
+    if (pin >= s->pin_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
                       __func__, addr);
         return 0;
@@ -257,10 +286,25 @@ static uint32_t apple_gpio_cfg_read(AppleGPIOState *s, unsigned int pin,
 
     val = s->gpio_cfg[pin];
 
-    if (((val & FUNC_MASK) == FUNC_GPIO) && ((val & CFG_MASK) == CFG_GP_IN)) {
+    // if (((val & FUNC_MASK) == FUNC_GPIO) && ((val & CFG_MASK) == CFG_GP_IN))
+    if ((val & FUNC_MASK) == FUNC_GPIO) // for baseband's reset_det
+    {
         val &= ~DATA_1;
-        val |= test_bit(pin, (unsigned long *)s->in);
+        val |= test_bit32(pin, s->in);
     }
+
+#if 1
+    if (((val & CFG_FUNC0) == CFG_FUNC0) && ((val & CFG_MASK) == CFG_DISABLE)) {
+        // val &= ~DATA_1;
+        // val |= test_bit32(pin, s->in);
+        //  TODO: Not even remotely sure if that's correct, but it makes apcie
+        //  work while at the same time avoiding i2c bus troubles, that would
+        //  happen if it would be like above
+        //  maybe the gpio-iic_scl/sda handling needs to be fixed (instead)
+        val |= DATA_1;
+        val &= ~test_bit32(pin, s->in);
+    }
+#endif
 
     return val;
 }
@@ -270,17 +314,22 @@ static void apple_gpio_int_write(AppleGPIOState *s, unsigned int group,
 {
     unsigned int offset;
 
-    if (group >= s->nirqgrps) {
+    DPRINTF("%s: WRITE addr 0x" HWADDR_FMT_plx " value 0x" HWADDR_FMT_plx
+            " group %d/0x%x\n",
+            __func__, addr, value, group, group);
+
+    if (group >= s->irq_group_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
                       __func__, addr);
         return;
     }
 
     offset = addr - REG_GPIOINT(group, 0);
-    s->int_cfg[group][offset >> 2] &= ~value;
+    s->int_config[(group * s->pin_count) + (offset / sizeof(uint32_t))] &=
+        ~value;
 
-    if (find_first_bit((unsigned long *)s->int_cfg[group], s->npins) ==
-        s->npins) {
+    if (find_first_bit32(&s->int_config[group * s->pin_count], s->pin_count) ==
+        s->pin_count) {
         qemu_irq_lower(s->irqs[group]);
     }
 }
@@ -290,20 +339,26 @@ static uint32_t apple_gpio_int_read(AppleGPIOState *s, unsigned int group,
 {
     unsigned int offset;
 
-    if (group >= s->nirqgrps) {
+    DPRINTF("%s: READ 0x" HWADDR_FMT_plx " group %d/0x%x\n", __func__, addr,
+            group, group);
+
+    if (group >= s->irq_group_count) {
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
                       __func__, addr);
         return 0;
     }
 
     offset = addr - REG_GPIOINT(group, 0);
-    return s->int_cfg[group][offset >> 2];
+    return s->int_config[(group * s->pin_count) + (offset / sizeof(uint32_t))];
 }
 
 static void apple_gpio_reg_write(void *opaque, hwaddr addr, uint64_t data,
                                  unsigned size)
 {
-    AppleGPIOState *s = APPLE_GPIO(opaque);
+    AppleGPIOState *s = opaque;
+
+    DPRINTF("%s: WRITE addr 0x" HWADDR_FMT_plx " data 0x" HWADDR_FMT_plx "\n",
+            __func__, addr, data);
 
     switch (addr) {
     case REG_GPIOCFG(0)... REG_GPIOCFG(GPIO_MAX_PIN_NR - 1):
@@ -315,16 +370,13 @@ static void apple_gpio_reg_write(void *opaque, hwaddr addr, uint64_t data,
         }
         return apple_gpio_cfg_write(s, (addr - REG_GPIOCFG(0)) >> 2, addr,
                                     data);
-
     case REG_GPIOINT(0, 0)... REG_GPIOINT(GPIO_MAX_INT_GRP_NR,
                                           GPIO_MAX_PIN_NR - 1):
         return apple_gpio_int_write(s, (addr - REG_GPIOINT(0, 0)) >> 6, addr,
                                     data);
-
     case REG_GPIO_NPL_IN_EN:
         s->npl = data;
         break;
-
     default:
         qemu_log_mask(LOG_UNIMP,
                       "%s: Bad offset 0x" HWADDR_FMT_plx ": " HWADDR_FMT_plx
@@ -336,7 +388,9 @@ static void apple_gpio_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t apple_gpio_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleGPIOState *s = APPLE_GPIO(opaque);
+    AppleGPIOState *s = opaque;
+
+    DPRINTF("%s: READ 0x" HWADDR_FMT_plx "\n", __func__, addr);
 
     switch (addr) {
     case REG_GPIOCFG(0)... REG_GPIOCFG(GPIO_MAX_PIN_NR - 1):
@@ -345,19 +399,15 @@ static uint64_t apple_gpio_reg_read(void *opaque, hwaddr addr, unsigned size)
     case REG_GPIOINT(0, 0)... REG_GPIOINT(GPIO_MAX_INT_GRP_NR,
                                           GPIO_MAX_PIN_NR - 1):
         return apple_gpio_int_read(s, (addr - REG_GPIOINT(0, 0)) >> 6, addr);
-
     case REG_GPIO_NPL_IN_EN:
         return s->npl;
-
     case 0xC4C:
         return 0xFF;
-
     default:
         qemu_log_mask(LOG_UNIMP, "%s: Bad offset 0x" HWADDR_FMT_plx "\n",
                       __func__, addr);
+        return 0;
     }
-
-    return 0;
 }
 
 static const MemoryRegionOps gpio_reg_ops = {
@@ -368,93 +418,97 @@ static const MemoryRegionOps gpio_reg_ops = {
     .valid.unaligned = false,
 };
 
-DeviceState *apple_custom_gpio_create(char *name, uint64_t mmio_size, uint32_t gpio_pins, uint32_t gpio_int_groups, uint32_t phandle)
+DeviceState *apple_gpio_new(const char *name, uint64_t mmio_size,
+                            uint32_t pin_count, uint32_t irq_group_count)
 {
     int i;
     DeviceState *dev;
     SysBusDevice *sbd;
     AppleGPIOState *s;
 
+    g_assert_nonnull(name);
+    g_assert_cmpuint(pin_count, <, GPIO_MAX_PIN_NR);
+
     dev = qdev_new(TYPE_APPLE_GPIO);
     sbd = SYS_BUS_DEVICE(dev);
     s = APPLE_GPIO(dev);
 
-    s->iomem = g_new(MemoryRegion, 1);
     dev->id = g_strdup(name);
-    memory_region_init_io(s->iomem, OBJECT(dev), &gpio_reg_ops, s,
-                          (const char *)name, mmio_size);
-    sysbus_init_mmio(sbd, s->iomem);
-
-    s->npins = gpio_pins;
-    assert(s->npins < GPIO_MAX_PIN_NR);
-    qdev_init_gpio_in(dev, apple_gpio_set, s->npins);
-
-    s->out = g_new(qemu_irq, s->npins);
-    qdev_init_gpio_out(dev, s->out, s->npins);
-
-    s->nirqgrps = gpio_int_groups;
-    s->irqs = g_new(qemu_irq, s->nirqgrps);
-
-    for (i = 0; i < s->nirqgrps; i++) {
-        sysbus_init_irq(sbd, &s->irqs[i]);
-    }
-
-    s->phandle = phandle;
-
-    return dev;
-}
-
-DeviceState *apple_gpio_create(DTBNode *node)
-{
-    int i;
-    uint64_t mmio_size;
-    DeviceState *dev;
-    SysBusDevice *sbd;
-    AppleGPIOState *s;
-
-    dev = qdev_new(TYPE_APPLE_GPIO);
-    sbd = SYS_BUS_DEVICE(dev);
-    s = APPLE_GPIO(dev);
+    s->pin_count = pin_count;
+    s->irq_group_count = irq_group_count;
+    s->int_config_len = irq_group_count * pin_count;
+    s->in_len = (s->pin_count + 31) / 32;
 
     s->iomem = g_new(MemoryRegion, 1);
-    DTBProp *prop = find_dtb_prop(node, "reg");
-    mmio_size = ((hwaddr *)prop->value)[1];
-    prop = find_dtb_prop(node, "name");
-    dev->id = g_strdup((const char *)prop->value);
-    memory_region_init_io(s->iomem, OBJECT(dev), &gpio_reg_ops, s,
-                          (const char *)prop->value, mmio_size);
+    memory_region_init_io(s->iomem, OBJECT(dev), &gpio_reg_ops, s, name,
+                          mmio_size);
     sysbus_init_mmio(sbd, s->iomem);
 
-    prop = find_dtb_prop(node, "#gpio-pins");
-    s->npins = *(uint32_t *)prop->value;
-    assert(s->npins < GPIO_MAX_PIN_NR);
-    qdev_init_gpio_in(dev, apple_gpio_set, s->npins);
+    qdev_init_gpio_in(dev, apple_gpio_set, s->pin_count);
 
-    s->out = g_new(qemu_irq, s->npins);
-    qdev_init_gpio_out(dev, s->out, s->npins);
+    s->out = g_new(qemu_irq, s->pin_count);
+    qdev_init_gpio_out(dev, s->out, s->pin_count);
 
-    prop = find_dtb_prop(node, "#gpio-int-groups");
-    s->nirqgrps = *(uint32_t *)prop->value;
-    s->irqs = g_new(qemu_irq, s->nirqgrps);
-
-    for (i = 0; i < s->nirqgrps; i++) {
+    s->irqs = g_new(qemu_irq, s->irq_group_count);
+    for (i = 0; i < s->irq_group_count; i++) {
         sysbus_init_irq(sbd, &s->irqs[i]);
     }
 
-    prop = find_dtb_prop(node, "AAPL,phandle");
-    assert(prop);
-
-    s->phandle = *(uint32_t *)prop->value;
+    s->gpio_cfg = g_new0(uint32_t, s->pin_count);
+    s->int_config = g_new0(uint32_t, s->int_config_len);
+    s->in_old = g_new0(uint32_t, s->in_len);
+    s->in = g_new0(uint32_t, s->in_len);
 
     return dev;
 }
 
-static void apple_gpio_class_init(ObjectClass *klass, void *data)
+DeviceState *apple_gpio_from_node(AppleDTNode *node)
 {
-    DeviceClass *dc = DEVICE_CLASS(klass);
-    dc->realize = apple_gpio_realize;
-    dc->reset = apple_gpio_reset;
+    AppleDTProp *reg;
+
+    reg = apple_dt_get_prop(node, "reg");
+    g_assert_nonnull(reg);
+
+    return apple_gpio_new(
+        apple_dt_get_prop_str(node, "name", &error_fatal),
+        ldq_le_p(reg->data + sizeof(uint64_t)),
+        apple_dt_get_prop_u32(node, "#gpio-pins", &error_fatal),
+        apple_dt_get_prop_u32(node, "#gpio-int-groups", &error_fatal));
+}
+
+static const VMStateDescription vmstate_apple_gpio = {
+    .name = "AppleGPIOState",
+    .version_id = 0,
+    .minimum_version_id = 0,
+    .fields =
+        (const VMStateField[]){
+            VMSTATE_UINT32(npl, AppleGPIOState),
+            VMSTATE_UINT32(pin_count, AppleGPIOState),
+            VMSTATE_UINT32(int_config_len, AppleGPIOState),
+            VMSTATE_UINT32(in_len, AppleGPIOState),
+            VMSTATE_VARRAY_UINT32_ALLOC(gpio_cfg, AppleGPIOState, pin_count, 0,
+                                        vmstate_info_uint32, uint32_t),
+            VMSTATE_VARRAY_UINT32_ALLOC(int_config, AppleGPIOState,
+                                        int_config_len, 0, vmstate_info_uint32,
+                                        uint32_t),
+            VMSTATE_VARRAY_UINT32_ALLOC(in, AppleGPIOState, in_len, 0,
+                                        vmstate_info_uint32, uint32_t),
+            VMSTATE_VARRAY_UINT32_ALLOC(in_old, AppleGPIOState, in_len, 0,
+                                        vmstate_info_uint32, uint32_t),
+            VMSTATE_END_OF_LIST(),
+        },
+};
+
+static void apple_gpio_class_init(ObjectClass *klass, const void *data)
+{
+    DeviceClass *dc;
+
+    dc = DEVICE_CLASS(klass);
+
     dc->desc = "Apple General Purpose Input/Output Controller";
+    dc->realize = apple_gpio_realize;
+    dc->vmsd = &vmstate_apple_gpio;
+    device_class_set_legacy_reset(dc, apple_gpio_reset);
 }
 
 static const TypeInfo apple_gpio_info = {

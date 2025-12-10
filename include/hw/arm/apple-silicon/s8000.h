@@ -1,8 +1,8 @@
 /*
- * Apple s8000 SoC.
+ * Apple S8000 SoC (iPhone 6s Plus).
  *
- * Copyright (c) 2023-2024 Visual Ehrmanntraut (VisualEhrmanntraut).
- * Copyright (c) 2023 Christian Inci (chris-pcguy).
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut (VisualEhrmanntraut).
+ * Copyright (c) 2023-2025 Christian Inci (chris-pcguy).
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -28,48 +28,50 @@
 #include "hw/boards.h"
 #include "hw/cpu/cluster.h"
 #include "hw/sysbus.h"
-#include "sysemu/kvm.h"
+#include "hw/usb/tcp-usb.h"
+#include "system/kvm.h"
 
-#define TYPE_S8000 "s8000"
+#define TYPE_APPLE_S8000 MACHINE_TYPE_NAME("s8000")
 
-#define TYPE_S8000_MACHINE MACHINE_TYPE_NAME(TYPE_S8000)
-
-#define S8000_MACHINE(obj) \
-    OBJECT_CHECK(S8000MachineState, (obj), TYPE_S8000_MACHINE)
+#define APPLE_S8000(obj) \
+    OBJECT_CHECK(AppleS8000MachineState, (obj), TYPE_APPLE_S8000)
 
 typedef struct {
     MachineClass parent;
-} S8000MachineClass;
+} AppleS8000MachineClass;
 
 typedef enum {
     kBootModeAuto = 0,
     kBootModeManual,
     kBootModeEnterRecovery,
     kBootModeExitRecovery,
-} BootMode;
+} AppleBootMode;
 
 typedef struct {
     MachineState parent;
-    hwaddr soc_base_pa;
-    hwaddr soc_size;
+    hwaddr armio_base;
+    hwaddr armio_size;
 
     unsigned long dram_size;
     AppleA9State *cpus[A9_MAX_CPU];
     CPUClusterState cluster;
     SysBusDevice *aic;
     SysBusDevice *sep;
-    MemoryRegion *sysmem;
+    MemoryRegion *sys_mem;
     MachoHeader64 *kernel;
     MachoHeader64 *secure_monitor;
     uint8_t *trustcache;
-    DTBNode *device_tree;
-    AppleBootInfo bootinfo;
-    AppleVideoArgs video;
+    char *securerom;
+    gsize securerom_size;
+    AppleDTNode *device_tree;
+    AppleBootInfo boot_info;
+    AppleVideoArgs video_args;
     char *trustcache_filename;
     char *ticket_filename;
-    char *seprom_filename;
+    char *sep_rom_filename;
     char *sep_fw_filename;
-    BootMode boot_mode;
+    char *securerom_filename;
+    AppleBootMode boot_mode;
     uint32_t build_version;
     uint64_t ecid;
     Notifier init_done_notifier;
@@ -79,6 +81,9 @@ typedef struct {
     bool kaslr_off;
     bool force_dfu;
     uint32_t board_id;
-} S8000MachineState;
+    USBTCPRemoteConnType usb_conn_type;
+    char *usb_conn_addr;
+    uint16_t usb_conn_port;
+} AppleS8000MachineState;
 
 #endif /* HW_ARM_APPLE_SILICON_S8000_H */

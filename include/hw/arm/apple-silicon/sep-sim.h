@@ -1,7 +1,7 @@
 /*
  * Apple SEP.
  *
- * Copyright (c) 2023-2024 Visual Ehrmanntraut.
+ * Copyright (c) 2023-2025 Visual Ehrmanntraut.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,10 +21,9 @@
 #define HW_ARM_APPLE_SILICON_SEP_SIM_H
 
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
+#include "hw/arm/apple-silicon/dt.h"
 #include "hw/misc/apple-silicon/a7iop/core.h"
 #include "hw/sysbus.h"
-#include "qemu/typedefs.h"
 #include "qom/object.h"
 
 #define TYPE_APPLE_SEP_SIM "apple-sep-sim"
@@ -35,7 +34,7 @@ struct AppleSEPSimClass {
     SysBusDeviceClass base_class;
 
     DeviceRealize parent_realize;
-    DeviceReset parent_reset;
+    ResettablePhases parent_phases;
 };
 
 #define SEP_ENDPOINT_MAX 0x20
@@ -67,6 +66,6 @@ struct AppleSEPSimState {
     AppleSEPSimOOLState ool_state[SEP_ENDPOINT_MAX];
 };
 
-AppleSEPSimState *apple_sep_sim_create(DTBNode *node, bool modern);
+AppleSEPSimState *apple_sep_sim_from_node(AppleDTNode *node, bool modern);
 
 #endif /* HW_ARM_APPLE_SILICON_SEP_SIM_H */

@@ -5,6 +5,7 @@
 #include "migration/vmstate.h"
 #include "qapi/error.h"
 #include "qemu/module.h"
+#include "qom/object.h"
 
 static void apple_typec_realize(DeviceState *dev, Error **errp)
 {
@@ -22,19 +23,20 @@ static void apple_typec_realize(DeviceState *dev, Error **errp)
                                           OBJECT(&s->dma_container_mr)));
 
     obj = object_property_get_link(OBJECT(dev), "dma-xhci", errp);
-    assert(obj);
-    assert(object_property_add_const_link(OBJECT(&s->dwc3), "dma-xhci", obj));
+    g_assert_nonnull(obj);
+    g_assert_nonnull(
+        object_property_add_const_link(OBJECT(&s->dwc3), "dma-xhci", obj));
 
     obj = object_property_get_link(OBJECT(dev), "dma-otg", errp);
-    assert(obj);
-    assert(object_property_add_const_link(OBJECT(&s->dwc2), "dma-mr", obj));
+    g_assert_nonnull(obj);
+    g_assert_nonnull(
+        object_property_add_const_link(OBJECT(&s->dwc2), "dma-mr", obj));
 
     sysbus_realize(SYS_BUS_DEVICE(&s->dwc2), errp);
     sysbus_realize(SYS_BUS_DEVICE(&s->dwc3), errp);
     sysbus_pass_irq(SYS_BUS_DEVICE(s), SYS_BUS_DEVICE(&s->dwc3));
     sysbus_init_irq(SYS_BUS_DEVICE(s), &s->dwc2.irq);
 
-    s->host = SYS_BUS_DEVICE(qdev_new(TYPE_USB_TCP_HOST));
     sysbus_realize(s->host, errp);
 
     bus = QLIST_FIRST(&DEVICE(s->host)->child_bus);
@@ -45,9 +47,6 @@ static void apple_typec_realize(DeviceState *dev, Error **errp)
 static void apple_typec_reset(DeviceState *dev)
 {
     AppleTypeCState *s = APPLE_TYPEC(dev);
-    device_cold_reset(DEVICE(&s->dwc2));
-    device_cold_reset(DEVICE(&s->dwc3));
-    device_cold_reset(DEVICE(s->host));
 }
 
 static void phy_reg_write(void *opaque, hwaddr addr, uint64_t data,
@@ -56,7 +55,7 @@ static void phy_reg_write(void *opaque, hwaddr addr, uint64_t data,
     // qemu_log_mask(LOG_UNIMP, "ATC: phy reg WRITE @ 0x" HWADDR_FMT_plx "
     // value: 0x" HWADDR_FMT_plx "\n", addr, data);
 
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     memcpy(s->phy_reg + addr, &data, size);
 }
 
@@ -64,7 +63,7 @@ static uint64_t phy_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     // qemu_log_mask(LOG_UNIMP, "ATC: phy reg READ @ 0x" HWADDR_FMT_plx "\n",
     // addr);
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     uint64_t val = 0;
 
     memcpy(&val, s->phy_reg + addr, size);
@@ -82,7 +81,7 @@ static void config_reg_write(void *opaque, hwaddr addr, uint64_t data,
     // qemu_log_mask(LOG_UNIMP, "ATC: config reg WRITE @ 0x" HWADDR_FMT_plx "
     // value: 0x" HWADDR_FMT_plx "\n", addr, data); arm_cpu_backtrace();
 
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     memcpy(s->config_reg + addr, &data, size);
 }
 
@@ -90,7 +89,7 @@ static uint64_t config_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     // qemu_log_mask(LOG_UNIMP, "ATC: config reg READ @ 0x" HWADDR_FMT_plx "\n",
     // addr); arm_cpu_backtrace();
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     uint64_t val = 0;
 
     memcpy(&val, s->config_reg + addr, size);
@@ -135,36 +134,41 @@ static void apple_typec_init(Object *obj)
         &s->container, 0x100000,
         sysbus_mmio_get_region(SYS_BUS_DEVICE(&s->dwc2), 0));
     sysbus_init_mmio(sbd, &s->container);
+
+    s->host = SYS_BUS_DEVICE(qdev_new(TYPE_USB_TCP_HOST));
+    object_property_add_alias(OBJECT(s), "conn-type", OBJECT(s->host),
+                              "conn-type");
+    object_property_add_alias(OBJECT(s), "conn-addr", OBJECT(s->host),
+                              "conn-addr");
+    object_property_add_alias(OBJECT(s), "conn-port", OBJECT(s->host),
+                              "conn-port");
 }
 
 static int apple_typec_post_load(void *opaque, int version_id)
 {
-    AppleTypeCState *s = APPLE_TYPEC(opaque);
+    AppleTypeCState *s = opaque;
     return 0;
 }
 
-static Property apple_typec_properties[] = {
-    DEFINE_PROP_END_OF_LIST(),
-};
-
 static const VMStateDescription vmstate_apple_typec = {
-    .name = "apple_typec",
+    .name = "AppleTypeCState",
+    .version_id = 0,
+    .minimum_version_id = 0,
     .post_load = apple_typec_post_load,
     .fields =
-        (VMStateField[]){
+        (const VMStateField[]){
             VMSTATE_UINT8_ARRAY(phy_reg, AppleTypeCState, 0x100),
             VMSTATE_END_OF_LIST(),
         }
 };
 
-static void apple_typec_class_init(ObjectClass *klass, void *data)
+static void apple_typec_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     dc->realize = apple_typec_realize;
-    dc->reset = apple_typec_reset;
+    device_class_set_legacy_reset(dc, apple_typec_reset);
     dc->desc = "Apple Type C USB PHY";
     dc->vmsd = &vmstate_apple_typec;
-    device_class_set_props(dc, apple_typec_properties);
 }
 
 static const TypeInfo apple_typec_info = {

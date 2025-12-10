@@ -15,9 +15,8 @@
 #include "qemu/module.h"
 #include "trace.h"
 
-static Property spmi_props[] = {
+static const Property spmi_props[] = {
     DEFINE_PROP_UINT8("sid", struct SPMISlave, sid, 0),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
 static const TypeInfo spmi_bus_info = {
@@ -231,7 +230,7 @@ SPMISlave *spmi_slave_create_simple(SPMIBus *bus, const char *name, uint8_t sid)
     return dev;
 }
 
-static void spmi_slave_class_init(ObjectClass *klass, void *data)
+static void spmi_slave_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *k = DEVICE_CLASS(klass);
     set_bit(DEVICE_CATEGORY_MISC, k->categories);

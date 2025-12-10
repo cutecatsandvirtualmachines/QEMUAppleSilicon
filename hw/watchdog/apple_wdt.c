@@ -1,5 +1,4 @@
 #include "qemu/osdep.h"
-#include "hw/arm/apple-silicon/dtb.h"
 #include "hw/irq.h"
 #include "hw/watchdog/apple_wdt.h"
 #include "migration/vmstate.h"
@@ -7,10 +6,10 @@
 #include "qemu/log.h"
 #include "qemu/module.h"
 #include "qemu/timer.h"
-#include "sysemu/watchdog.h"
+#include "system/watchdog.h"
 #include "trace.h"
 
-#define TYPE_APPLE_WDT "apple.wdt"
+#define TYPE_APPLE_WDT "apple-wdt"
 OBJECT_DECLARE_SIMPLE_TYPE(AppleWDTState, APPLE_WDT)
 
 #define REG_CHIP_WDOG_TMR (0x0)
@@ -37,8 +36,8 @@ struct AppleWDTState {
     uint64_t cntfrq_hz;
 #pragma pack(push, 1)
     union {
-#define REG_SIZE 0x20
-        uint32_t raw[0x20 / sizeof(uint32_t)];
+#define REG_SIZE 0x44
+        uint32_t raw[REG_SIZE / sizeof(uint32_t)];
         struct {
             uint32_t chip_timer;
             uint32_t chip_reset_counter;
@@ -92,7 +91,7 @@ static inline uint32_t wdt_get_sys_timer(AppleWDTState *s)
 
 static void wdt_update(void *opaque)
 {
-    AppleWDTState *s = APPLE_WDT(opaque);
+    AppleWDTState *s = opaque;
     uint64_t expiry = 0xffffffff;
     uint32_t chip_tmr = wdt_get_chip_timer(s);
     uint32_t sys_tmr = wdt_get_sys_timer(s);
@@ -139,7 +138,7 @@ static void wdt_update(void *opaque)
 static void wdt_reg_write(void *opaque, hwaddr addr, uint64_t data,
                           unsigned size)
 {
-    AppleWDTState *s = APPLE_WDT(opaque);
+    AppleWDTState *s = opaque;
     uint32_t index = addr >> 2;
     uint32_t *mmio;
     uint32_t old;
@@ -182,7 +181,7 @@ static void wdt_reg_write(void *opaque, hwaddr addr, uint64_t data,
 
 static uint64_t wdt_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
-    AppleWDTState *s = APPLE_WDT(opaque);
+    AppleWDTState *s = opaque;
     uint32_t val = 0;
     uint32_t *mmio = NULL;
 
@@ -245,26 +244,24 @@ static void apple_wdt_unrealize(DeviceState *dev)
     s->timer = NULL;
 }
 
-SysBusDevice *apple_wdt_create(DTBNode *node)
+SysBusDevice *apple_wdt_from_node(AppleDTNode *node)
 {
     DeviceState *dev;
     AppleWDTState *s;
     SysBusDevice *sbd;
-    DTBProp *prop;
+    AppleDTProp *prop;
     uint64_t *reg;
 
     dev = qdev_new(TYPE_APPLE_WDT);
     s = APPLE_WDT(dev);
     sbd = SYS_BUS_DEVICE(dev);
 
-    prop = find_dtb_prop(node, "wdt-version");
-    assert(prop);
-    *(uint32_t *)prop->value = 1;
+    apple_dt_set_prop_u32(node, "wdt-version", 1);
 
-    prop = find_dtb_prop(node, "reg");
-    assert(prop);
+    prop = apple_dt_get_prop(node, "reg");
+    g_assert_nonnull(prop);
 
-    reg = (uint64_t *)prop->value;
+    reg = (uint64_t *)prop->data;
 
     /*
      * 0: reg
@@ -289,8 +286,10 @@ SysBusDevice *apple_wdt_create(DTBNode *node)
 
 static const VMStateDescription vmstate_apple_wdt = {
     .name = "apple_wdt",
+    .version_id = 0,
+    .minimum_version_id = 0,
     .fields =
-        (VMStateField[]){
+        (const VMStateField[]){
             VMSTATE_TIMER_PTR(timer, AppleWDTState),
             VMSTATE_UINT64(cnt_period_ns, AppleWDTState),
             VMSTATE_UINT64(cntfrq_hz, AppleWDTState),
@@ -302,13 +301,13 @@ static const VMStateDescription vmstate_apple_wdt = {
         }
 };
 
-static void apple_wdt_class_init(ObjectClass *klass, void *data)
+static void apple_wdt_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
     dc->realize = apple_wdt_realize;
     dc->unrealize = apple_wdt_unrealize;
-    dc->reset = apple_wdt_reset;
+    device_class_set_legacy_reset(dc, apple_wdt_reset);
     dc->desc = "Apple Watch Dog Timer";
     dc->vmsd = &vmstate_apple_wdt;
     set_bit(DEVICE_CATEGORY_WATCHDOG, dc->categories);
