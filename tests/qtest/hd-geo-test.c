@@ -29,11 +29,31 @@ static char *create_test_img(int secs)
 {
     char *template;
     int fd, ret;
+    FILE *fp;
 
     fd = g_file_open_tmp("qtest.XXXXXX", &template, NULL);
     g_assert(fd >= 0);
+
+#ifdef _WIN32
+    /* On Windows, use fseek/fwrite approach instead of ftruncate */
+    close(fd);
+    fp = fopen(template, "r+b");
+    if (fp) {
+        ret = fseek(fp, (long)secs * 512 - 1, SEEK_SET);
+        if (ret == 0) {
+            fputc(0, fp);
+            ret = 0;
+        } else {
+            ret = -1;
+        }
+        fclose(fp);
+    } else {
+        ret = -1;
+    }
+#else
     ret = ftruncate(fd, (off_t)secs * 512);
     close(fd);
+#endif
 
     if (ret) {
         g_free(template);
