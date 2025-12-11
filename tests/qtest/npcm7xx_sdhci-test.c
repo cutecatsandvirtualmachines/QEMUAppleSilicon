@@ -20,6 +20,7 @@
 #include "libqtest.h"
 #include "libqtest-single.h"
 #include "libqos/sdhci-cmd.h"
+#include "qtest-win32-compat.h"
 
 #define NPCM7XX_REG_SIZE 0x100
 #define NPCM7XX_MMC_BA 0xF0842000

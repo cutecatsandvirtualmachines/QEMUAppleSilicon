@@ -14,6 +14,7 @@
 #include "libqos/libqos-pc.h"
 #include "libqos/libqos-spapr.h"
 #include "libqtest.h"
+#include "qtest-win32-compat.h"
 
 #define TMPSHMSIZE (1 << 20)
 static char *tmpshm;

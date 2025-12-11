@@ -27,6 +27,7 @@
 
 #include "libqtest-single.h"
 #include "qobject/qdict.h"
+#include "qtest-win32-compat.h"
 
 #define DRIVE_FLOPPY_BLANK \
     "-drive if=floppy,file=null-co://,file.read-zeroes=on,format=raw,size=1440k"

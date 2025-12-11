@@ -11,6 +11,7 @@
 #include "libqtest-single.h"
 #include "qemu/bitops.h"
 #include "aspeed-smc-utils.h"
+#include "qtest-win32-compat.h"
 
 static void test_ast2700_evb(AspeedSMCTestData *data)
 {

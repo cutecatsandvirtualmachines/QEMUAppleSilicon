@@ -18,6 +18,7 @@
 #include "standard-headers/linux/virtio_ids.h"
 #include "standard-headers/linux/virtio_pci.h"
 #include "standard-headers/linux/virtio_blk.h"
+#include "tests/qtest/qtest-win32-compat.h"
 #include "fuzz.h"
 #include "qos_fuzz.h"
 

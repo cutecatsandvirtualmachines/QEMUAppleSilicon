@@ -9,6 +9,7 @@
 
 #include "qemu/osdep.h"
 #include "libqtest.h"
+#include "qtest-win32-compat.h"
 
 /*
  * To test the pflash_cfi02 device, we run QEMU with the musicpal machine with

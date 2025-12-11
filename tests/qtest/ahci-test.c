@@ -35,6 +35,7 @@
 
 #include "hw/pci/pci_ids.h"
 #include "hw/pci/pci_regs.h"
+#include "qtest-win32-compat.h"
 
 /* Test images sizes in MB */
 #define TEST_IMAGE_SIZE_MB_LARGE (200 * 1024)

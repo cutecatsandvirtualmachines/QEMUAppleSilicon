@@ -33,6 +33,7 @@
 #include "qemu/bswap.h"
 #include "hw/pci/pci_ids.h"
 #include "hw/pci/pci_regs.h"
+#include "qtest-win32-compat.h"
 
 /* Specified by ATA (physical) CHS geometry for ~64 MiB device.  */
 #define TEST_IMAGE_SIZE ((130 * 16 * 63) * 512)

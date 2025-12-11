@@ -14,6 +14,7 @@
 #include "scsi/constants.h"
 #include "block/ufs.h"
 #include "qemu/bitmap.h"
+#include "qtest-win32-compat.h"
 
 #define DWORD_BYTE 4
 /* Test images sizes in Bytes */

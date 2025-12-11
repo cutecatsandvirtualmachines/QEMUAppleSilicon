@@ -20,6 +20,7 @@
 #include "libqos/qgraph.h"
 #include "libqos/vhost-user-blk.h"
 #include "libqos/libqos-pc.h"
+#include "qtest-win32-compat.h"
 
 #define TEST_IMAGE_SIZE         (64 * 1024 * 1024)
 #define QVIRTIO_BLK_TIMEOUT_US  (30 * 1000 * 1000)

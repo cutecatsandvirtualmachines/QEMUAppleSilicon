@@ -16,6 +16,7 @@
 #include "standard-headers/linux/virtio_pci.h"
 #include "libqos/qgraph.h"
 #include "libqos/virtio-blk.h"
+#include "qtest-win32-compat.h"
 
 #define TEST_IMAGE_SIZE         (64 * 1024 * 1024)
 #define QVIRTIO_BLK_TIMEOUT_US  (30 * 1000 * 1000)

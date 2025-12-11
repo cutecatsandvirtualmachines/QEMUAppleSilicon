@@ -11,6 +11,7 @@
 #include "qemu/bswap.h"
 #include "hw/ssi/pnv_spi_regs.h"
 #include "pnv-xscom.h"
+#include "qtest-win32-compat.h"
 
 #define FLASH_SIZE              (512 * 1024)
 #define SPIC2_XSCOM_BASE        0xc0040
